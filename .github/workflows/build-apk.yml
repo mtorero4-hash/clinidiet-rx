@@ -12,22 +12,762 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
-      - name: Setup Java JDK 21 (Required for Capacitor 7 & Gradle 8+)
+      - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
-      - name: Generate Project Scaffold (Vite + Tailwind + Capacitor)
+      - name: Generate Project Scaffold & Guarantee src/App.jsx
         run: |
           mkdir -p src
-          if [ -f "App.jsx" ]; then
-            cp App.jsx src/App.jsx
+
+          # 1. Search repo for any existing React file first
+          FOUND_FILE=$(find . -maxdepth 3 -not -path '*/.*' -not -path './src/*' -not -path './node_modules/*' \( -iname "*.jsx" -o -iname "App.js" \) | head -n 1)
+
+          if [ -n "$FOUND_FILE" ]; then
+            echo "Found existing React file at: $FOUND_FILE"
+            cp "$FOUND_FILE" src/App.jsx
+          else
+            echo "No external App.jsx found in repo root. Generating built-in CliniDiet Rx src/App.jsx..."
+            cat << 'EOF' > src/App.jsx
+          import React, { useState, useEffect, useMemo } from 'react';
+          import {
+            Activity, ShieldCheck, Utensils, Package, AlertTriangle,
+            CheckCircle2, Info, RotateCcw, Plus, Trash2, HeartPulse
+          } from 'lucide-react';
+
+          const PRESETS = {
+            t2dm_htn: {
+              name: 'T2DM + Hypertension',
+              age: 54, gender: 'male', heightCm: 170, weightKg: 82, activity: 'light',
+              diagnoses: ['t2dm', 'htn'],
+              medications: ['metformin', 'ace_arb'],
+              labs: { fbs: 168, hba1c: 8.1, creatinine: 1.0, potassium: 4.6, uricAcid: 5.8 },
+              preferences: { dietType: 'veg', glutenFree: false, lowSodium: true }
+            },
+            ckd_hyperk: {
+              name: 'CKD Stage 3b + Hyperkalemia',
+              age: 62, gender: 'female', heightCm: 158, weightKg: 64, activity: 'sedentary',
+              diagnoses: ['ckd', 'htn'],
+              medications: ['ace_arb', 'loop_diuretic'],
+              labs: { fbs: 104, hba1c: 5.9, creatinine: 1.9, potassium: 5.4, uricAcid: 6.4 },
+              preferences: { dietType: 'veg', glutenFree: false, lowSodium: true }
+            },
+            gout_warfarin: {
+              name: 'Gout + Warfarin + Statin',
+              age: 58, gender: 'male', heightCm: 174, weightKg: 88, activity: 'light',
+              diagnoses: ['gout', 'htn'],
+              medications: ['warfarin', 'statin'],
+              labs: { fbs: 108, hba1c: 6.0, creatinine: 1.1, potassium: 4.3, uricAcid: 8.4 },
+              preferences: { dietType: 'non_veg', glutenFree: false, lowSodium: true }
+            },
+            healthy: {
+              name: 'Healthy Active Adult',
+              age: 32, gender: 'male', heightCm: 176, weightKg: 72, activity: 'moderate',
+              diagnoses: [],
+              medications: [],
+              labs: { fbs: 88, hba1c: 5.2, creatinine: 0.9, potassium: 4.1, uricAcid: 5.0 },
+              preferences: { dietType: 'veg', glutenFree: false, lowSodium: false }
+            }
+          };
+
+          const RECIPES = [
+            {
+              id: 'moong_chilla', slot: 'Breakfast', name: 'Moong Dal Chilla with Mint Curd',
+              veg: true, glutenFree: true,
+              kcal: 310, carbs: 36, protein: 16, fat: 8, sodium: 240, potassium: 380,
+              tags: ['low_gi'],
+              ingredients: ['Yellow Moong Dal', 'Curd (Dahi)', 'Cumin Seeds', 'Fresh Coriander']
+            },
+            {
+              id: 'veg_dalia', slot: 'Breakfast', name: 'Broken Wheat (Dalia) Upma',
+              veg: true, glutenFree: false,
+              kcal: 290, carbs: 44, protein: 10, fat: 7, sodium: 260, potassium: 310,
+              tags: ['low_gi', 'low_purine'],
+              ingredients: ['Broken Wheat (Dalia)', 'Carrots', 'Green Beans', 'Mustard Oil']
+            },
+            {
+              id: 'aloo_poha', slot: 'Breakfast', name: 'Sweetened Aloo Poha',
+              veg: true, glutenFree: true,
+              kcal: 380, carbs: 68, protein: 6, fat: 9, sodium: 480, potassium: 540,
+              tags: ['high_gi', 'high_potassium'],
+              ingredients: ['Flattened Rice (Poha)', 'Potato', 'Peanuts', 'Sugar']
+            },
+            {
+              id: 'lauki_roti', slot: 'Lunch', name: 'Lauki (Bottle Gourd) Sabzi, Toor Dal & 2 Phulkas',
+              veg: true, glutenFree: false,
+              kcal: 460, carbs: 58, protein: 18, fat: 12, sodium: 320, potassium: 440,
+              tags: ['low_gi', 'renal_safe', 'low_purine'],
+              ingredients: ['Bottle Gourd (Lauki)', 'Whole Wheat Atta', 'Toor Dal', 'Ghee']
+            },
+            {
+              id: 'palak_paneer', slot: 'Lunch', name: 'Palak Paneer with 2 Rotis',
+              veg: true, glutenFree: false,
+              kcal: 540, carbs: 46, protein: 24, fat: 28, sodium: 620, potassium: 890,
+              tags: ['high_potassium', 'high_vit_k', 'high_oxalate'],
+              ingredients: ['Spinach (Palak)', 'Paneer', 'Whole Wheat Atta', 'Cream']
+            },
+            {
+              id: 'makhana_snack', slot: 'Evening Snack', name: 'Roasted Phool Makhana & Walnuts',
+              veg: true, glutenFree: true,
+              kcal: 180, carbs: 18, protein: 6, fat: 9, sodium: 85, potassium: 190,
+              tags: ['low_gi', 'renal_safe', 'low_purine'],
+              ingredients: ['Phool Makhana (Foxnuts)', 'Walnuts', 'Black Pepper']
+            },
+            {
+              id: 'ridge_gourd_dinner', slot: 'Dinner', name: 'Tori (Ridge Gourd) Bhurji, Moong Dal & Roti',
+              veg: true, glutenFree: false,
+              kcal: 410, carbs: 50, protein: 17, fat: 11, sodium: 280, potassium: 390,
+              tags: ['low_gi', 'renal_safe', 'low_purine'],
+              ingredients: ['Ridge Gourd (Tori)', 'Yellow Moong Dal', 'Whole Wheat Atta', 'Turmeric']
+            },
+            {
+              id: 'grilled_fish_dinner', slot: 'Dinner', name: 'Steamed Rohu Fish with Lauki & Rice',
+              veg: false, glutenFree: true,
+              kcal: 440, carbs: 45, protein: 28, fat: 14, sodium: 290, potassium: 430,
+              tags: ['low_gi', 'moderate_purine'],
+              ingredients: ['Rohu Fish', 'Bottle Gourd (Lauki)', 'Basmati Rice', 'Mustard Oil']
+            }
+          ];
+
+          const DEFAULT_PANTRY = [
+            { id: '1', name: 'Yellow Moong Dal', category: 'Legumes' },
+            { id: '2', name: 'Bottle Gourd (Lauki)', category: 'Vegetables' },
+            { id: '3', name: 'Whole Wheat Atta', category: 'Grains' },
+            { id: '4', name: 'Spinach (Palak)', category: 'Leafy Greens' },
+            { id: '5', name: 'Phool Makhana (Foxnuts)', category: 'Snacks' },
+            { id: '6', name: 'Curd (Dahi)', category: 'Dairy' },
+            { id: '7', name: 'Ridge Gourd (Tori)', category: 'Vegetables' }
+          ];
+
+          export default function App() {
+            const [activeTab, setActiveTab] = useState('intake');
+            const [profile, setProfile] = useState(() => {
+              try {
+                const saved = localStorage.getItem('clinidiet_profile_v1');
+                return saved ? JSON.parse(saved) : PRESETS.t2dm_htn;
+              } catch {
+                return PRESETS.t2dm_htn;
+              }
+            });
+
+            const [pantry, setPantry] = useState(() => {
+              try {
+                const saved = localStorage.getItem('clinidiet_pantry_v1');
+                return saved ? JSON.parse(saved) : DEFAULT_PANTRY;
+              } catch {
+                return DEFAULT_PANTRY;
+              }
+            });
+
+            const [newPantryItem, setNewPantryItem] = useState('');
+
+            useEffect(() => {
+              try {
+                localStorage.setItem('clinidiet_profile_v1', JSON.stringify(profile));
+              } catch {}
+            }, [profile]);
+
+            useEffect(() => {
+              try {
+                localStorage.setItem('clinidiet_pantry_v1', JSON.stringify(pantry));
+              } catch {}
+            }, [pantry]);
+
+            const clinicalOutput = useMemo(() => {
+              const hMeters = profile.heightCm / 100;
+              const bmi = +(profile.weightKg / (hMeters * hMeters)).toFixed(1);
+              const heightInches = profile.heightCm / 2.54;
+              const ibw = +(
+                (profile.gender === 'male' ? 50 : 45.5) +
+                2.3 * Math.max(0, heightInches - 60)
+              ).toFixed(1);
+
+              // 2021 CKD-EPI Race-Free Creatinine eGFR
+              const scr = Math.max(0.4, Number(profile.labs.creatinine) || 1.0);
+              const kappa = profile.gender === 'female' ? 0.7 : 0.9;
+              const alpha = profile.gender === 'female' ? -0.241 : -0.302;
+              const minRatio = Math.min(scr / kappa, 1);
+              const maxRatio = Math.max(scr / kappa, 1);
+              const sexMult = profile.gender === 'female' ? 1.012 : 1.0;
+              const egfr = Math.round(
+                142 * Math.pow(minRatio, alpha) * Math.pow(maxRatio, -1.2) * Math.pow(0.9938, profile.age) * sexMult
+              );
+
+              // Mifflin-St Jeor BMR
+              const bmr = Math.round(
+                10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profile.age + (profile.gender === 'male' ? 5 : -161)
+              );
+              const actMap = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725 };
+              let targetKcal = Math.round(bmr * (actMap[profile.activity] || 1.2));
+              if (bmi >= 25) targetKcal = Math.max(1300, targetKcal - 350);
+
+              const rules = [];
+              const blockedTags = new Set();
+              let maxSodiumMg = profile.preferences.lowSodium ? 2000 : 2300;
+              let maxPotassiumMg = 4700;
+              let proteinPerKgIbw = 1.0;
+              let carbPct = 0.50;
+
+              const hasT2dm = profile.diagnoses.includes('t2dm') || profile.labs.hba1c >= 6.5 || profile.labs.fbs >= 126;
+              const hasCkd = profile.diagnoses.includes('ckd') || egfr < 60;
+              const hasHtn = profile.diagnoses.includes('htn');
+              const hasGout = profile.diagnoses.includes('gout') || profile.labs.uricAcid > 7.0;
+
+              if (hasT2dm) {
+                carbPct = 0.40;
+                blockedTags.add('high_gi');
+                rules.push({
+                  severity: 'high',
+                  title: 'Glycemic Control & Dawn Phenomenon Protocol',
+                  detail: 'Carbohydrates capped at 40% of energy. High-GI refined starches blocked; evening complex carbs paired with protein/fiber to blunt hepatic overnight glucose output.'
+                });
+              }
+
+              if (hasCkd) {
+                proteinPerKgIbw = 0.8;
+                rules.push({
+                  severity: 'high',
+                  title: `Renal Protection Protocol (eGFR ${egfr} mL/min)`,
+                  detail: 'Non-dialysis CKD detected: dietary protein moderated to 0.8 g/kg Ideal Body Weight to reduce intraglomerular pressure.'
+                });
+              }
+
+              if (profile.labs.potassium >= 5.0 || (hasCkd && profile.medications.includes('ace_arb'))) {
+                maxPotassiumMg = 2000;
+                blockedTags.add('high_potassium');
+                rules.push({
+                  severity: 'critical',
+                  title: 'Hyperkalemia Guardrail Active',
+                  detail: `Serum K+ (${profile.labs.potassium} mEq/L) or CKD + ACEi/ARB use restricts daily potassium to <= 2000 mg/day. High-potassium greens/tubers leached or excluded.`
+                });
+              }
+
+              if (hasHtn || hasCkd) {
+                maxSodiumMg = 1500;
+                rules.push({
+                  severity: 'medium',
+                  title: 'Strict Sodium Ceiling (1,500 mg/day)',
+                  detail: 'DASH/KDIGO sodium cap applied for blood pressure and fluid volume control.'
+                });
+              }
+
+              if (hasGout) {
+                blockedTags.add('high_purine');
+                blockedTags.add('moderate_purine');
+                rules.push({
+                  severity: 'medium',
+                  title: 'Hyperuricemia / Gout Purine Restriction',
+                  detail: `Uric acid (${profile.labs.uricAcid} mg/dL) requires exclusion of high-purine organ meats, seafood, and fructose-sweetened items.`
+                });
+              }
+
+              if (profile.medications.includes('warfarin')) {
+                blockedTags.add('high_vit_k');
+                rules.push({
+                  severity: 'critical',
+                  title: 'Warfarin - Vitamin K Consistency Lock',
+                  detail: 'Sudden high-dose Vitamin K leafy greens (e.g., concentrated Spinach/Palak dishes) flagged to prevent INR fluctuations.'
+                });
+              }
+
+              if (profile.medications.includes('metformin')) {
+                rules.push({
+                  severity: 'info',
+                  title: 'Metformin Micronutrient Advisory',
+                  detail: 'Long-term Metformin therapy warrants periodic Vitamin B12 monitoring; include curd/fortified sources if vegetarian.'
+                });
+              }
+
+              const targetProteinG = Math.round(ibw * proteinPerKgIbw);
+              const targetCarbsG = Math.round((targetKcal * carbPct) / 4);
+              const targetFatG = Math.max(35, Math.round((targetKcal - targetProteinG * 4 - targetCarbsG * 4) / 9));
+
+              return {
+                bmi, ibw, egfr, bmr, targetKcal,
+                targetProteinG, targetCarbsG, targetFatG,
+                maxSodiumMg, maxPotassiumMg, rules, blockedTags
+              };
+            }, [profile]);
+
+            const mealPlan = useMemo(() => {
+              const slots = ['Breakfast', 'Lunch', 'Evening Snack', 'Dinner'];
+              const selected = [];
+              const rejected = [];
+
+              for (const recipe of RECIPES) {
+                if (profile.preferences.dietType === 'veg' && !recipe.veg) {
+                  rejected.push({ name: recipe.name, reason: 'Excluded by Vegetarian preference' });
+                  continue;
+                }
+                if (profile.preferences.glutenFree && !recipe.glutenFree) {
+                  rejected.push({ name: recipe.name, reason: 'Contains gluten (Wheat/Dalia)' });
+                  continue;
+                }
+                const hitTag = recipe.tags.find(t => clinicalOutput.blockedTags.has(t));
+                if (hitTag) {
+                  rejected.push({ name: recipe.name, reason: `Blocked by clinical guardrail: ${hitTag.replace(/_/g, ' ')}` });
+                  continue;
+                }
+                if (!selected.find(s => s.slot === recipe.slot)) {
+                  selected.push(recipe);
+                }
+              }
+
+              const baseKcal = selected.reduce((acc, r) => acc + r.kcal, 0) || 1;
+              const scale = Math.min(1.35, Math.max(0.75, clinicalOutput.targetKcal / baseKcal));
+
+              const scaledMeals = selected.map(r => ({
+                ...r,
+                portionMultiplier: +scale.toFixed(2),
+                kcal: Math.round(r.kcal * scale),
+                carbs: Math.round(r.carbs * scale),
+                protein: Math.round(r.protein * scale),
+                fat: Math.round(r.fat * scale),
+                sodium: Math.round(r.sodium * scale),
+                potassium: Math.round(r.potassium * scale)
+              }));
+
+              const totals = scaledMeals.reduce(
+                (acc, r) => ({
+                  kcal: acc.kcal + r.kcal,
+                  carbs: acc.carbs + r.carbs,
+                  protein: acc.protein + r.protein,
+                  fat: acc.fat + r.fat,
+                  sodium: acc.sodium + r.sodium,
+                  potassium: acc.potassium + r.potassium
+                }),
+                { kcal: 0, carbs: 0, protein: 0, fat: 0, sodium: 0, potassium: 0 }
+              );
+
+              return { scaledMeals, totals, rejected };
+            }, [profile, clinicalOutput]);
+
+            const toggleArrayItem = (field, value) => {
+              setProfile(prev => {
+                const exists = prev[field].includes(value);
+                return {
+                  ...prev,
+                  [field]: exists ? prev[field].filter(i => i !== value) : [...prev[field], value]
+                };
+              });
+            };
+
+            const pantryNames = new Set(pantry.map(p => p.name.toLowerCase()));
+
+            return (
+              <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 font-sans">
+                <header className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                      <HeartPulse className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h1 className="text-base font-bold tracking-tight text-white">CliniDiet Rx</h1>
+                      <p className="text-xs text-emerald-400">100% On-Device Deterministic Engine</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full border border-slate-700">
+                    Offline Local DB
+                  </span>
+                </header>
+
+                <main className="max-w-xl mx-auto p-4 space-y-4">
+                  {/* Quick Clinical Presets */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                      Load Clinical Patient Preset
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(PRESETS).map(([key, item]) => (
+                        <button
+                          key={key}
+                          onClick={() => setProfile(item)}
+                          className={`text-left text-xs p-2.5 rounded-xl border transition ${
+                            profile.name === item.name
+                              ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 font-semibold'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live Biometric Strip */}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
+                      <div className="text-[11px] text-slate-400">BMI</div>
+                      <div className="text-lg font-bold text-white">{clinicalOutput.bmi}</div>
+                      <div className="text-[10px] text-slate-400">kg/m²</div>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
+                      <div className="text-[11px] text-slate-400">Ideal Weight</div>
+                      <div className="text-lg font-bold text-emerald-400">{clinicalOutput.ibw}</div>
+                      <div className="text-[10px] text-slate-400">kg (Devine)</div>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-center">
+                      <div className="text-[11px] text-slate-400">eGFR (CKD-EPI)</div>
+                      <div className={`text-lg font-bold ${clinicalOutput.egfr < 60 ? 'text-amber-400' : 'text-sky-400'}`}>
+                        {clinicalOutput.egfr}
+                      </div>
+                      <div className="text-[10px] text-slate-400">mL/min/1.73m²</div>
+                    </div>
+                  </div>
+
+                  {activeTab === 'intake' && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h2 className="text-sm font-semibold text-white">Anthropometrics & Vitals</h2>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <label className="space-y-1">
+                            <span className="text-slate-400">Age (years)</span>
+                            <input
+                              type="number"
+                              value={profile.age}
+                              onChange={e => setProfile({ ...profile, age: +e.target.value || 30 })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-400">Sex</span>
+                            <select
+                              value={profile.gender}
+                              onChange={e => setProfile({ ...profile, gender: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            >
+                              <option value="male">Male</option>
+                              <option value="female">Female</option>
+                            </select>
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-400">Height (cm)</span>
+                            <input
+                              type="number"
+                              value={profile.heightCm}
+                              onChange={e => setProfile({ ...profile, heightCm: +e.target.value || 165 })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-400">Weight (kg)</span>
+                            <input
+                              type="number"
+                              value={profile.weightKg}
+                              onChange={e => setProfile({ ...profile, weightKg: +e.target.value || 65 })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h2 className="text-sm font-semibold text-white">Laboratory Panel</h2>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <label className="space-y-1">
+                            <span className="text-slate-400">Fasting Glucose (mg/dL)</span>
+                            <input
+                              type="number"
+                              value={profile.labs.fbs}
+                              onChange={e => setProfile({ ...profile, labs: { ...profile.labs, fbs: +e.target.value } })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-400">HbA1c (%)</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={profile.labs.hba1c}
+                              onChange={e => setProfile({ ...profile, labs: { ...profile.labs, hba1c: +e.target.value } })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-400">Serum Creatinine (mg/dL)</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={profile.labs.creatinine}
+                              onChange={e => setProfile({ ...profile, labs: { ...profile.labs, creatinine: +e.target.value } })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-slate-400">Serum Potassium (mEq/L)</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={profile.labs.potassium}
+                              onChange={e => setProfile({ ...profile, labs: { ...profile.labs, potassium: +e.target.value } })}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h2 className="text-sm font-semibold text-white">Diagnoses & Active Medications</h2>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {[
+                            { id: 't2dm', label: 'Type 2 Diabetes' },
+                            { id: 'htn', label: 'Hypertension' },
+                            { id: 'ckd', label: 'Chronic Kidney Disease' },
+                            { id: 'gout', label: 'Gout / Hyperuricemia' }
+                          ].map(d => (
+                            <button
+                              key={d.id}
+                              onClick={() => toggleArrayItem('diagnoses', d.id)}
+                              className={`px-3 py-1.5 rounded-xl border ${
+                                profile.diagnoses.includes(d.id)
+                                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                                  : 'bg-slate-950 border-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs pt-2 border-t border-slate-800">
+                          {[
+                            { id: 'metformin', label: 'Metformin' },
+                            { id: 'ace_arb', label: 'Telmisartan / Enalapril (ACEi/ARB)' },
+                            { id: 'warfarin', label: 'Warfarin' },
+                            { id: 'statin', label: 'Atorvastatin' }
+                          ].map(m => (
+                            <button
+                              key={m.id}
+                              onClick={() => toggleArrayItem('medications', m.id)}
+                              className={`px-3 py-1.5 rounded-xl border ${
+                                profile.medications.includes(m.id)
+                                  ? 'bg-sky-500/20 border-sky-500/50 text-sky-300'
+                                  : 'bg-slate-950 border-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'rules' && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                        <h2 className="text-sm font-semibold text-white mb-3">Deterministic Daily Targets</h2>
+                        <div className="grid grid-cols-2 gap-2.5 text-xs">
+                          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-slate-400">Caloric Target</span>
+                            <div className="text-base font-bold text-white mt-0.5">{clinicalOutput.targetKcal} kcal</div>
+                          </div>
+                          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-slate-400">Protein Target (IBW)</span>
+                            <div className="text-base font-bold text-emerald-400 mt-0.5">{clinicalOutput.targetProteinG} g</div>
+                          </div>
+                          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-slate-400">Carbohydrate Cap</span>
+                            <div className="text-base font-bold text-sky-400 mt-0.5">{clinicalOutput.targetCarbsG} g</div>
+                          </div>
+                          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                            <span className="text-slate-400">Na+ / K+ Ceilings</span>
+                            <div className="text-base font-bold text-amber-400 mt-0.5">
+                              {clinicalOutput.maxSodiumMg} / {clinicalOutput.maxPotassiumMg} mg
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {clinicalOutput.rules.map((r, idx) => (
+                          <div key={idx} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-1">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                              <AlertTriangle className="w-4 h-4 shrink-0" />
+                              <span>{r.title}</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed">{r.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'meals' && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                        <div className="text-xs text-slate-400 mb-2">Daily Plan Totals vs Clinical Caps</div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-slate-400">Energy:</span>{' '}
+                            <strong className="text-white">{mealPlan.totals.kcal} kcal</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Carbs:</span>{' '}
+                            <strong className="text-sky-400">{mealPlan.totals.carbs}g</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Protein:</span>{' '}
+                            <strong className="text-emerald-400">{mealPlan.totals.protein}g</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Sodium:</span>{' '}
+                            <strong className="text-amber-300">{mealPlan.totals.sodium}mg</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Potassium:</span>{' '}
+                            <strong className="text-amber-300">{mealPlan.totals.potassium}mg</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {mealPlan.scaledMeals.map(meal => (
+                        <div key={meal.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-semibold">
+                                {meal.slot} ({meal.portionMultiplier}x Portion)
+                              </span>
+                              <h3 className="text-sm font-bold text-white">{meal.name}</h3>
+                            </div>
+                            <span className="text-xs font-semibold bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                              {meal.kcal} kcal
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex flex-wrap gap-3">
+                            <span>C: {meal.carbs}g</span>
+                            <span>P: {meal.protein}g</span>
+                            <span>F: {meal.fat}g</span>
+                            <span>Na: {meal.sodium}mg</span>
+                            <span>K: {meal.potassium}mg</span>
+                          </div>
+                          <div className="pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
+                            {meal.ingredients.map((ing, i) => {
+                              const inPantry = pantryNames.has(ing.toLowerCase());
+                              return (
+                                <span
+                                  key={i}
+                                  className={`text-[10px] px-2 py-0.5 rounded-md border ${
+                                    inPantry
+                                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                                  }`}
+                                >
+                                  {inPantry ? '✓ ' : '+ '}
+                                  {ing}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {mealPlan.rejected.length > 0 && (
+                        <div className="bg-slate-900/60 border border-red-500/20 rounded-2xl p-4 space-y-2">
+                          <div className="text-xs font-semibold text-red-400">
+                            Automatically Blocked Recipes (Safety Audit)
+                          </div>
+                          {mealPlan.rejected.map((rej, i) => (
+                            <div key={i} className="text-xs text-slate-400 flex justify-between gap-2">
+                              <span className="text-slate-200">{rej.name}</span>
+                              <span className="text-red-300 text-right">{rej.reason}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'pantry' && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                        <h2 className="text-sm font-semibold text-white">Local Pantry Inventory</h2>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Add ingredient (e.g., Carrots, Paneer)..."
+                            value={newPantryItem}
+                            onChange={e => setNewPantryItem(e.target.value)}
+                            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                          />
+                          <button
+                            onClick={() => {
+                              if (!newPantryItem.trim()) return;
+                              setPantry([...pantry, { id: String(Date.now()), name: newPantryItem.trim(), category: 'Custom' }]);
+                              setNewPantryItem('');
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1"
+                          >
+                            <Plus className="w-4 h-4" /> Add
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                          {pantry.map(item => {
+                            const isSpinachConflict =
+                              item.name.toLowerCase().includes('spinach') &&
+                              (clinicalOutput.blockedTags.has('high_potassium') || clinicalOutput.blockedTags.has('high_vit_k'));
+                            return (
+                              <div
+                                key={item.id}
+                                className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs"
+                              >
+                                <div>
+                                  <span className="font-medium text-white">{item.name}</span>
+                                  {isSpinachConflict && (
+                                    <span className="ml-2 text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded border border-red-500/40">
+                                      Contraindicated (High K+ / Vit K)
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => setPantry(pantry.filter(p => p.id !== item.id))}
+                                  className="text-slate-500 hover:text-red-400"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </main>
+
+                <nav className="fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 px-2 py-2 flex justify-around z-20">
+                  {[
+                    { id: 'intake', label: 'Intake', icon: Activity },
+                    { id: 'rules', label: 'Clinical Rules', icon: ShieldCheck },
+                    { id: 'meals', label: 'Meal Plan', icon: Utensils },
+                    { id: 'pantry', label: 'Pantry', icon: Package }
+                  ].map(t => {
+                    const Icon = t.icon;
+                    const active = activeTab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => setActiveTab(t.id)}
+                        className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-medium ${
+                          active ? 'text-emerald-400' : 'text-slate-400'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+            );
+          }
+          EOF
           fi
 
           cat << 'EOF' > package.json
@@ -41,9 +781,9 @@ jobs:
               "build": "vite build"
             },
             "dependencies": {
-              "@capacitor/android": "^7.0.0",
-              "@capacitor/cli": "^7.0.0",
-              "@capacitor/core": "^7.0.0",
+              "@capacitor/android": "^6.0.0",
+              "@capacitor/cli": "^6.0.0",
+              "@capacitor/core": "^6.0.0",
               "lucide-react": "^0.460.0",
               "react": "^18.3.1",
               "react-dom": "^18.3.1"
@@ -53,7 +793,7 @@ jobs:
               "autoprefixer": "^10.4.20",
               "postcss": "^8.4.49",
               "tailwindcss": "^3.4.17",
-              "vite": "^6.0.0"
+              "vite": "^5.4.11"
             }
           }
           EOF
