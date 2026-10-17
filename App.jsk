@@ -1,0 +1,3000 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  ShieldCheck,
+  Activity,
+  Utensils,
+  Package,
+  Smartphone,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  RefreshCw,
+  Download,
+  Upload,
+  Trash2,
+  Plus,
+  ChevronRight,
+  ChevronDown,
+  Lock,
+  Cpu,
+  FileCode,
+  Copy,
+  Check,
+  Search,
+  ArrowRightLeft,
+  Ban,
+  HeartPulse,
+  Scale,
+  Droplets,
+  Pill,
+  Terminal,
+  X
+} from 'lucide-react';
+
+// ============================================================================
+// 1. LOCAL-FIRST STORAGE KEYS & DEFAULT CLINICAL DATA
+// ============================================================================
+const STORAGE_KEYS = {
+  PROFILE: 'clinidiet_local_profile_v1',
+  PANTRY: 'clinidiet_local_pantry_v1',
+  MEAL_OVERRIDES: 'clinidiet_local_meals_v1',
+  PRIORITIZE_PANTRY: 'clinidiet_prioritize_pantry_v1'
+};
+
+const DEFAULT_PROFILE = {
+  name: 'Patient #01 (Local)',
+  age: 54,
+  sex: 'male',
+  heightCm: 172,
+  weightKg: 82,
+  activityLevel: 'light', // sedentary, light, moderate, active
+  primaryGoal: 'glycemic_control', // glycemic_control, weight_loss, renal_preservation, bp_control, maintenance
+  diagnoses: ['t2dm', 'htn'], // t2dm, htn, ckd_1_2, ckd_3, ckd_4, dyslipidemia, gout
+  labs: {
+    fbg: 148,         // Fasting Blood Glucose (mg/dL)
+    hba1c: 7.8,       // HbA1c (%)
+    creatinine: 1.1,  // Serum Creatinine (mg/dL)
+    potassium: 4.6,   // Serum Potassium (mEq/L)
+    uricAcid: 5.8     // Serum Uric Acid (mg/dL)
+  },
+  medications: ['metformin', 'ace_arb'], // metformin, sulfonylurea_insulin, ace_arb, spironolactone, loop_thiazide, statin, warfarin
+  dietType: 'vegetarian', // vegetarian, vegan, eggetarian, omnivore
+  allergiesAndPrefs: ['low_sodium'] // gluten_free, lactose_free, low_sodium
+};
+
+const CLINICAL_PRESETS = [
+  {
+    id: 't2dm_htn',
+    label: 'T2DM + HTN Patient',
+    badge: 'HbA1c 7.8% • Metformin + ARB',
+    profile: {
+      name: 'R. Sharma (T2DM + HTN)',
+      age: 54,
+      sex: 'male',
+      heightCm: 172,
+      weightKg: 82,
+      activityLevel: 'light',
+      primaryGoal: 'glycemic_control',
+      diagnoses: ['t2dm', 'htn'],
+      labs: { fbg: 148, hba1c: 7.8, creatinine: 1.1, potassium: 4.6, uricAcid: 5.8 },
+      medications: ['metformin', 'ace_arb'],
+      dietType: 'vegetarian',
+      allergiesAndPrefs: ['low_sodium']
+    }
+  },
+  {
+    id: 'ckd_hyperk',
+    label: 'CKD Stage 3b + Hyperkalemia',
+    badge: 'eGFR ~29 • K+ 5.3 • Spironolactone',
+    profile: {
+      name: 'M. Devi (CKD 3b + High K+)',
+      age: 66,
+      sex: 'female',
+      heightCm: 158,
+      weightKg: 64,
+      activityLevel: 'sedentary',
+      primaryGoal: 'renal_preservation',
+      diagnoses: ['ckd_3', 'htn', 't2dm'],
+      labs: { fbg: 134, hba1c: 7.1, creatinine: 1.9, potassium: 5.3, uricAcid: 6.4 },
+      medications: ['ace_arb', 'spironolactone'],
+      dietType: 'vegetarian',
+      allergiesAndPrefs: ['low_sodium']
+    }
+  },
+  {
+    id: 'gout_dyslip',
+    label: 'Gout + Dyslipidemia + Warfarin',
+    badge: 'Uric Acid 8.3 • Statin + Warfarin',
+    profile: {
+      name: 'A. Verma (Gout + Anticoag)',
+      age: 59,
+      sex: 'male',
+      heightCm: 175,
+      weightKg: 89,
+      activityLevel: 'light',
+      primaryGoal: 'weight_loss',
+      diagnoses: ['dyslipidemia', 'gout', 'htn'],
+      labs: { fbg: 98, hba1c: 5.6, creatinine: 1.0, potassium: 4.2, uricAcid: 8.3 },
+      medications: ['statin', 'warfarin'],
+      dietType: 'omnivore',
+      allergiesAndPrefs: []
+    }
+  },
+  {
+    id: 'healthy_active',
+    label: 'Healthy Active Adult',
+    badge: 'Normal Labs • General Wellness',
+    profile: {
+      name: 'K. Nair (Active Wellness)',
+      age: 31,
+      sex: 'female',
+      heightCm: 165,
+      weightKg: 60,
+      activityLevel: 'active',
+      primaryGoal: 'maintenance',
+      diagnoses: [],
+      labs: { fbg: 86, hba1c: 5.1, creatinine: 0.8, potassium: 4.1, uricAcid: 4.5 },
+      medications: [],
+      dietType: 'eggetarian',
+      allergiesAndPrefs: []
+    }
+  }
+];
+
+// ============================================================================
+// 2. PANTRY DATABASE WITH CLINICAL BIOCHEMICAL FLAGS
+// ============================================================================
+const INITIAL_PANTRY_ITEMS = [
+  // Grains & Millets
+  { id: 'oats', name: 'Steel-Cut / Rolled Oats', category: 'Grains & Millets', inStock: true, gi: 52, potassiumMgPer100g: 350, sodiumMgPer100g: 4, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'foxtail_millet', name: 'Foxtail Millet (Kangni)', category: 'Grains & Millets', inStock: true, gi: 50, potassiumMgPer100g: 250, sodiumMgPer100g: 5, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'ragi', name: 'Finger Millet (Ragi Flour)', category: 'Grains & Millets', inStock: true, gi: 54, potassiumMgPer100g: 408, sodiumMgPer100g: 11, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'whole_wheat', name: 'Whole Wheat Atta', category: 'Grains & Millets', inStock: true, gi: 54, potassiumMgPer100g: 360, sodiumMgPer100g: 2, vitaminKHigh: false, purineHigh: false, gluten: true },
+  { id: 'quinoa', name: 'White/Red Quinoa', category: 'Grains & Millets', inStock: false, gi: 53, potassiumMgPer100g: 310, sodiumMgPer100g: 5, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'white_rice', name: 'Polished White Rice', category: 'Grains & Millets', inStock: true, gi: 73, potassiumMgPer100g: 80, sodiumMgPer100g: 1, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'poha', name: 'Flattened Rice (Poha)', category: 'Grains & Millets', inStock: true, gi: 70, potassiumMgPer100g: 110, sodiumMgPer100g: 5, vitaminKHigh: false, purineHigh: false, gluten: false },
+
+  // Pulses & Legumes
+  { id: 'moong_dal', name: 'Split Yellow Moong Dal', category: 'Pulses & Legumes', inStock: true, gi: 38, potassiumMgPer100g: 350, sodiumMgPer100g: 15, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'masoor_dal', name: 'Red Lentils (Masoor Dal)', category: 'Pulses & Legumes', inStock: true, gi: 32, potassiumMgPer100g: 369, sodiumMgPer100g: 6, vitaminKHigh: false, purineHigh: true, gluten: false },
+  { id: 'chickpeas', name: 'Chickpeas (Kabuli Chana)', category: 'Pulses & Legumes', inStock: false, gi: 36, potassiumMgPer100g: 477, sodiumMgPer100g: 24, vitaminKHigh: false, purineHigh: true, gluten: false },
+
+  // Vegetables & Greens
+  { id: 'lauki', name: 'Bottle Gourd (Lauki)', category: 'Vegetables & Greens', inStock: true, gi: 15, potassiumMgPer100g: 150, sodiumMgPer100g: 2, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'turai', name: 'Ridge Gourd (Turai)', category: 'Vegetables & Greens', inStock: true, gi: 15, potassiumMgPer100g: 139, sodiumMgPer100g: 3, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'cucumber', name: 'Fresh Cucumber', category: 'Vegetables & Greens', inStock: true, gi: 15, potassiumMgPer100g: 147, sodiumMgPer100g: 2, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'bell_pepper', name: 'Bell Peppers (Capsicum)', category: 'Vegetables & Greens', inStock: true, gi: 15, potassiumMgPer100g: 175, sodiumMgPer100g: 3, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'zucchini', name: 'Green Zucchini / Broccoli', category: 'Vegetables & Greens', inStock: false, gi: 15, potassiumMgPer100g: 260, sodiumMgPer100g: 8, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'spinach', name: 'Fresh Spinach (Palak)', category: 'Vegetables & Greens', inStock: true, gi: 15, potassiumMgPer100g: 558, sodiumMgPer100g: 79, vitaminKHigh: true, purineHigh: true, gluten: false },
+  { id: 'potato', name: 'Starchy Potato (Aloo)', category: 'Vegetables & Greens', inStock: true, gi: 78, potassiumMgPer100g: 535, sodiumMgPer100g: 6, vitaminKHigh: false, purineHigh: false, gluten: false },
+
+  // Dairy & Proteins
+  { id: 'paneer', name: 'Low-Fat Cow Paneer', category: 'Dairy & Proteins', inStock: true, gi: 27, potassiumMgPer100g: 100, sodiumMgPer100g: 18, vitaminKHigh: false, purineHigh: false, lactose: true },
+  { id: 'curd', name: 'Probiotic Curd / Greek Yogurt', category: 'Dairy & Proteins', inStock: true, gi: 28, potassiumMgPer100g: 141, sodiumMgPer100g: 36, vitaminKHigh: false, purineHigh: false, lactose: true },
+  { id: 'tofu', name: 'Firm Soy Tofu', category: 'Dairy & Proteins', inStock: false, gi: 15, potassiumMgPer100g: 121, sodiumMgPer100g: 7, vitaminKHigh: false, purineHigh: false, lactose: false },
+  { id: 'egg_whites', name: 'Pasteurized Eggs / Whites', category: 'Dairy & Proteins', inStock: true, gi: 0, potassiumMgPer100g: 163, sodiumMgPer100g: 166, vitaminKHigh: false, purineHigh: false, lactose: false },
+  { id: 'chicken_breast', name: 'Skinless Chicken Breast', category: 'Dairy & Proteins', inStock: false, gi: 0, potassiumMgPer100g: 256, sodiumMgPer100g: 74, vitaminKHigh: false, purineHigh: true, lactose: false },
+
+  // Nuts, Seeds & Fruits
+  { id: 'chia_seeds', name: 'Raw Chia Seeds', category: 'Nuts, Seeds & Fruits', inStock: true, gi: 1, potassiumMgPer100g: 407, sodiumMgPer100g: 16, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'walnuts', name: 'Raw Walnuts & Almonds', category: 'Nuts, Seeds & Fruits', inStock: true, gi: 15, potassiumMgPer100g: 441, sodiumMgPer100g: 2, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'makhana', name: 'Fox Nuts (Phool Makhana)', category: 'Nuts, Seeds & Fruits', inStock: true, gi: 37, potassiumMgPer100g: 210, sodiumMgPer100g: 4, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'apple', name: 'Green / Red Apple', category: 'Nuts, Seeds & Fruits', inStock: true, gi: 36, potassiumMgPer100g: 107, sodiumMgPer100g: 1, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'guava', name: 'Fresh Pink Guava', category: 'Nuts, Seeds & Fruits', inStock: false, gi: 31, potassiumMgPer100g: 417, sodiumMgPer100g: 2, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'banana', name: 'Ripe Banana', category: 'Nuts, Seeds & Fruits', inStock: true, gi: 62, potassiumMgPer100g: 358, sodiumMgPer100g: 1, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'coconut_water', name: 'Tender Coconut Water', category: 'Nuts, Seeds & Fruits', inStock: false, gi: 54, potassiumMgPer100g: 600, sodiumMgPer100g: 105, vitaminKHigh: false, purineHigh: false, gluten: false },
+  { id: 'grapefruit', name: 'Grapefruit / Pomelo', category: 'Nuts, Seeds & Fruits', inStock: false, gi: 25, potassiumMgPer100g: 135, sodiumMgPer100g: 0, vitaminKHigh: false, purineHigh: false, citrusCyp3a4: true }
+];
+
+// ============================================================================
+// 3. CLINICAL RECIPE DATABASE (26 DETERMINISTIC RECIPES ACROSS 5 SLOTS)
+// ============================================================================
+const CLINICAL_RECIPES = [
+  // ---------------- BREAKFAST SLOTS ----------------
+  {
+    id: 'bf_moong_chilla',
+    slot: 'breakfast',
+    name: 'Split Moong Dal Chilla with Mint Cucumber Relish',
+    baseServingDesc: '2 medium savory crepes (140g) + 50g cucumber relish',
+    calories: 310,
+    carbsG: 38,
+    proteinG: 16,
+    fatG: 9,
+    sodiumMg: 210,
+    potassiumMg: 265,
+    gi: 38,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['moong_dal', 'cucumber', 'bell_pepper'],
+    clinicalNotes: 'Low-GI complex legume protein with soluble fiber; leached moong keeps potassium renal-safe.'
+  },
+  {
+    id: 'bf_oats_chia',
+    slot: 'breakfast',
+    name: 'Cinnamon Steel-Cut Oats & Chia Porridge (Water/Almond Base)',
+    baseServingDesc: '1 bowl cooked oats (200g) + 10g chia + 15g walnuts',
+    calories: 325,
+    carbsG: 42,
+    proteinG: 11,
+    fatG: 12,
+    sodiumMg: 95,
+    potassiumMg: 240,
+    gi: 48,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['oats', 'chia_seeds', 'walnuts'],
+    clinicalNotes: 'Beta-glucan soluble fiber blunts postprandial glucose excursion and lowers LDL cholesterol.'
+  },
+  {
+    id: 'bf_egg_white_omelette',
+    slot: 'breakfast',
+    name: 'Herbed 3-Egg White & Capsicum Skillet with 1 Phulka',
+    baseServingDesc: '3 egg whites + 60g bell pepper + 1 whole wheat phulka',
+    calories: 295,
+    carbsG: 31,
+    proteinG: 21,
+    fatG: 8,
+    sodiumMg: 260,
+    potassiumMg: 230,
+    gi: 45,
+    dietTypes: ['eggetarian', 'omnivore'],
+    glutenFree: false,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['egg_whites', 'bell_pepper', 'whole_wheat'],
+    clinicalNotes: 'High biological value albumin protein with ultra-low phosphorus and controlled potassium.'
+  },
+  {
+    id: 'bf_ragi_idli',
+    slot: 'breakfast',
+    name: 'Steamed Ragi & Bottle Gourd Idli with Roasted Chana Dip',
+    baseServingDesc: '3 steamed millet idlis + 2 tbsp low-sodium chutney',
+    calories: 315,
+    carbsG: 46,
+    proteinG: 11,
+    fatG: 8,
+    sodiumMg: 240,
+    potassiumMg: 310,
+    gi: 52,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['ragi', 'lauki', 'curd'],
+    clinicalNotes: 'Fermented finger millet provides slow-release carbohydrates and bioavailable calcium.'
+  },
+  {
+    id: 'bf_aloo_poha_high_gi',
+    slot: 'breakfast',
+    name: 'Traditional Potato & Peanut Masala Poha',
+    baseServingDesc: '1 large plate (220g) with diced potato',
+    calories: 370,
+    carbsG: 62,
+    proteinG: 8,
+    fatG: 11,
+    sodiumMg: 540,
+    potassiumMg: 510,
+    gi: 72,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['poha', 'potato'],
+    clinicalNotes: 'High glycemic index (72) and high potassium from potatoes; unsuitable for uncontrolled T2DM or CKD.'
+  },
+  {
+    id: 'bf_banana_coco_smoothie',
+    slot: 'breakfast',
+    name: 'Ripe Banana, Coconut Water & Grapefruit Energy Bowl',
+    baseServingDesc: '300ml smoothie bowl with citrus segments',
+    calories: 340,
+    carbsG: 68,
+    proteinG: 6,
+    fatG: 5,
+    sodiumMg: 140,
+    potassiumMg: 780,
+    gi: 64,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: true,
+    ingredients: ['banana', 'coconut_water', 'grapefruit'],
+    clinicalNotes: 'Contains extreme potassium (780mg) and CYP3A4-inhibiting grapefruit; blocked in CKD, T2DM, and Statin therapy.'
+  },
+
+  // ---------------- MID-MORNING SNACK SLOTS ----------------
+  {
+    id: 'mm_apple_walnut',
+    slot: 'mid_morning',
+    name: 'Crisp Sliced Apple with 5 Raw Walnuts & Cinnamon',
+    baseServingDesc: '100g cored apple slices + 15g walnut halves',
+    calories: 145,
+    carbsG: 15,
+    proteinG: 3,
+    fatG: 9,
+    sodiumMg: 5,
+    potassiumMg: 165,
+    gi: 36,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['apple', 'walnuts'],
+    clinicalNotes: 'Renal-safe low-potassium fruit paired with omega-3 alpha-linolenic acid.'
+  },
+  {
+    id: 'mm_cucumber_curd_chia',
+    slot: 'mid_morning',
+    name: 'Chilled Cucumber & Probiotic Curd Bowl with Chia',
+    baseServingDesc: '100g peeled cucumber + 80g probiotic curd + 1 tsp chia',
+    calories: 120,
+    carbsG: 10,
+    proteinG: 7,
+    fatG: 5,
+    sodiumMg: 65,
+    potassiumMg: 195,
+    gi: 25,
+    dietTypes: ['vegetarian', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: false,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['cucumber', 'curd', 'chia_seeds'],
+    clinicalNotes: 'Ultra-low glycemic load (GI 25) hydration snack with gut-supportive lactobacilli.'
+  },
+  {
+    id: 'mm_tofu_pepper_bites',
+    slot: 'mid_morning',
+    name: 'Herbed Tofu & Roasted Bell Pepper Skewers',
+    baseServingDesc: '80g firm tofu cubes + 50g capsicum',
+    calories: 135,
+    carbsG: 6,
+    proteinG: 12,
+    fatG: 7,
+    sodiumMg: 85,
+    potassiumMg: 185,
+    gi: 18,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['tofu', 'bell_pepper'],
+    clinicalNotes: 'Dairy-free, low-purine plant protein ideal for glycemic stability.'
+  },
+  {
+    id: 'mm_guava_chia',
+    slot: 'mid_morning',
+    name: 'Fresh Pink Guava Wedges with Roasted Flax & Chia',
+    baseServingDesc: '120g fresh guava + 1 tsp seeds',
+    calories: 130,
+    carbsG: 19,
+    proteinG: 4,
+    fatG: 4,
+    sodiumMg: 8,
+    potassiumMg: 460,
+    gi: 31,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['guava', 'chia_seeds'],
+    clinicalNotes: 'Excellent low-GI vitamin C snack for T2DM, but high potassium (460mg) triggers renal block in CKD.'
+  },
+
+  // ---------------- LUNCH SLOTS ----------------
+  {
+    id: 'ln_foxtail_lauki_khichdi',
+    slot: 'lunch',
+    name: 'Foxtail Millet & Bottle Gourd Khichdi with Low-Fat Curd',
+    baseServingDesc: '240g millet-moong khichdi + 100g lauki + 60g curd',
+    calories: 440,
+    carbsG: 54,
+    proteinG: 18,
+    fatG: 14,
+    sodiumMg: 290,
+    potassiumMg: 310,
+    gi: 46,
+    dietTypes: ['vegetarian', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: false,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['foxtail_millet', 'moong_dal', 'lauki', 'curd'],
+    clinicalNotes: 'Balanced amino acid profile with high-water-content gourd; low potassium and low GI.'
+  },
+  {
+    id: 'ln_turai_phulka_paneer',
+    slot: 'lunch',
+    name: 'Leached Ridge Gourd (Turai) Sabzi, 2 Phulkas & Grilled Paneer',
+    baseServingDesc: '2 whole wheat phulkas + 150g turai + 60g cow paneer',
+    calories: 455,
+    carbsG: 49,
+    proteinG: 21,
+    fatG: 16,
+    sodiumMg: 275,
+    potassiumMg: 295,
+    gi: 48,
+    dietTypes: ['vegetarian', 'eggetarian', 'omnivore'],
+    glutenFree: false,
+    lactoseFree: false,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['turai', 'whole_wheat', 'paneer', 'cucumber'],
+    clinicalNotes: 'Leached gourd keeps electrolytes strictly controlled while paneer provides purine-free protein.'
+  },
+  {
+    id: 'ln_quinoa_tofu_bowl',
+    slot: 'lunch',
+    name: 'Warm Quinoa, Roasted Capsicum & Lemon-Herb Tofu Bowl',
+    baseServingDesc: '160g cooked quinoa + 100g firm tofu + 100g bell peppers',
+    calories: 430,
+    carbsG: 46,
+    proteinG: 20,
+    fatG: 15,
+    sodiumMg: 240,
+    potassiumMg: 325,
+    gi: 44,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['quinoa', 'tofu', 'bell_pepper', 'cucumber'],
+    clinicalNotes: '100% plant-based, gluten-free, dairy-free clinical bowl with complete 9 essential amino acids.'
+  },
+  {
+    id: 'ln_chicken_millet_plate',
+    slot: 'lunch',
+    name: 'Herb-Grilled Chicken Breast with Foxtail Millet & Zucchini',
+    baseServingDesc: '110g grilled chicken + 140g cooked millet + 100g zucchini',
+    calories: 465,
+    carbsG: 44,
+    proteinG: 32,
+    fatG: 14,
+    sodiumMg: 310,
+    potassiumMg: 390,
+    gi: 45,
+    dietTypes: ['omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: true,
+    containsGrapefruit: false,
+    ingredients: ['chicken_breast', 'foxtail_millet', 'zucchini'],
+    clinicalNotes: 'High-protein lean poultry meal; automatically restricted if CKD protein ceiling or Gout purine rule is active.'
+  },
+  {
+    id: 'ln_palak_paneer_high_k',
+    slot: 'lunch',
+    name: 'Rich Palak (Spinach) Paneer with 2 Whole Wheat Rotis',
+    baseServingDesc: '200g spinach paneer gravy + 2 rotis',
+    calories: 510,
+    carbsG: 48,
+    proteinG: 22,
+    fatG: 24,
+    sodiumMg: 580,
+    potassiumMg: 740,
+    gi: 49,
+    dietTypes: ['vegetarian', 'eggetarian', 'omnivore'],
+    glutenFree: false,
+    lactoseFree: false,
+    highVitaminK: true,
+    highPurine: true,
+    containsGrapefruit: false,
+    ingredients: ['spinach', 'paneer', 'whole_wheat'],
+    clinicalNotes: 'Very high Potassium (740mg) and high Vitamin K1 (phylloquinone); blocked in CKD/Hyperkalemia and Warfarin therapy.'
+  },
+  {
+    id: 'ln_white_rice_potato_curry',
+    slot: 'lunch',
+    name: 'Steamed White Rice with Spiced Potato & Chickpea Curry',
+    baseServingDesc: '220g white rice + 180g aloo chana curry',
+    calories: 530,
+    carbsG: 86,
+    proteinG: 14,
+    fatG: 13,
+    sodiumMg: 620,
+    potassiumMg: 680,
+    gi: 74,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: true,
+    containsGrapefruit: false,
+    ingredients: ['white_rice', 'potato', 'chickpeas'],
+    clinicalNotes: 'High glycemic index (74) and heavy carbohydrate load (86g); blocked by T2DM and Renal rules.'
+  },
+
+  // ---------------- EVENING SNACK SLOTS ----------------
+  {
+    id: 'ev_roasted_makhana',
+    slot: 'evening',
+    name: 'Turmeric & Black Pepper Dry-Roasted Phool Makhana (Fox Nuts)',
+    baseServingDesc: '35g dry-roasted makhana + 5 almonds',
+    calories: 150,
+    carbsG: 21,
+    proteinG: 5,
+    fatG: 5,
+    sodiumMg: 35,
+    potassiumMg: 140,
+    gi: 37,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['makhana', 'walnuts'],
+    clinicalNotes: 'Extremely low sodium, low potassium, and low GI; safe across T2DM, CKD Stages 1-4, and HTN.'
+  },
+  {
+    id: 'ev_moong_sprout_salad',
+    slot: 'evening',
+    name: 'Steamed Moong Sprout & Diced Bell Pepper Warm Salad',
+    baseServingDesc: '110g steamed sprouts + cucumber & lemon juice',
+    calories: 155,
+    carbsG: 22,
+    proteinG: 10,
+    fatG: 3,
+    sodiumMg: 75,
+    potassiumMg: 235,
+    gi: 34,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['moong_dal', 'bell_pepper', 'cucumber'],
+    clinicalNotes: 'Blanched/steamed sprouts prevent gastrointestinal distress while maintaining slow glucose release.'
+  },
+  {
+    id: 'ev_boiled_egg_whites',
+    slot: 'evening',
+    name: '2 Seasoned Boiled Egg Whites with Cucumber Sticks',
+    baseServingDesc: '2 egg whites + 100g cucumber + roasted cumin',
+    calories: 115,
+    carbsG: 8,
+    proteinG: 12,
+    fatG: 4,
+    sodiumMg: 145,
+    potassiumMg: 175,
+    gi: 15,
+    dietTypes: ['eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['egg_whites', 'cucumber'],
+    clinicalNotes: 'Zero-starch evening bridge snack that prevents late-afternoon glycemic dips.'
+  },
+
+  // ---------------- DINNER SLOTS ----------------
+  {
+    id: 'dn_lauki_moong_soup_phulka',
+    slot: 'dinner',
+    name: 'Light Bottle Gourd & Yellow Moong Stew with 1 Whole Wheat Phulka',
+    baseServingDesc: '250ml thick lauki-moong stew + 1 phulka + sautéed capsicum',
+    calories: 365,
+    carbsG: 46,
+    proteinG: 16,
+    fatG: 11,
+    sodiumMg: 230,
+    potassiumMg: 280,
+    gi: 42,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: false,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['lauki', 'moong_dal', 'whole_wheat', 'bell_pepper'],
+    clinicalNotes: 'Controlled dinner carbohydrate load supports overnight hepatic glucose regulation and lowers morning FBG.'
+  },
+  {
+    id: 'dn_millet_turai_bowl',
+    slot: 'dinner',
+    name: 'Steamed Foxtail Millet Pulao with Ridge Gourd & Tofu Cubes',
+    baseServingDesc: '180g foxtail millet + 120g turai + 60g tofu',
+    calories: 380,
+    carbsG: 45,
+    proteinG: 17,
+    fatG: 13,
+    sodiumMg: 215,
+    potassiumMg: 290,
+    gi: 45,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['foxtail_millet', 'turai', 'tofu', 'bell_pepper'],
+    clinicalNotes: 'Gluten-free, renal-protective dinner with low dietary acid load and steady overnight glycemic curve.'
+  },
+  {
+    id: 'dn_paneer_capsicum_roti',
+    slot: 'dinner',
+    name: 'Tawa-Grilled Paneer & Bell Pepper Stir-Fry with 1 Multigrain Roti',
+    baseServingDesc: '80g low-fat paneer + 100g capsicum + 1 roti',
+    calories: 390,
+    carbsG: 36,
+    proteinG: 20,
+    fatG: 17,
+    sodiumMg: 265,
+    potassiumMg: 270,
+    gi: 41,
+    dietTypes: ['vegetarian', 'eggetarian', 'omnivore'],
+    glutenFree: false,
+    lactoseFree: false,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['paneer', 'bell_pepper', 'whole_wheat'],
+    clinicalNotes: 'Slow-digesting casein protein in paneer prevents nocturnal hypoglycemia in patients on insulin/sulfonylureas.'
+  },
+  {
+    id: 'dn_egg_curry_millet',
+    slot: 'dinner',
+    name: 'Poached Egg White & Bottle Gourd Herb Curry with Foxtail Millet',
+    baseServingDesc: '3 egg whites in lauki gravy + 140g cooked millet',
+    calories: 375,
+    carbsG: 43,
+    proteinG: 22,
+    fatG: 11,
+    sodiumMg: 280,
+    potassiumMg: 285,
+    gi: 44,
+    dietTypes: ['eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: false,
+    highPurine: false,
+    containsGrapefruit: false,
+    ingredients: ['egg_whites', 'lauki', 'foxtail_millet'],
+    clinicalNotes: 'High-albumin, low-potassium dinner ideal for maintaining lean mass without taxing renal clearance.'
+  },
+  {
+    id: 'dn_masoor_spinach_dal',
+    slot: 'dinner',
+    name: 'Red Lentil (Masoor) & Spinach Dal Fry with White Rice',
+    baseServingDesc: '200g masoor palak dal + 180g white rice',
+    calories: 470,
+    carbsG: 72,
+    proteinG: 19,
+    fatG: 11,
+    sodiumMg: 540,
+    potassiumMg: 690,
+    gi: 67,
+    dietTypes: ['vegetarian', 'vegan', 'eggetarian', 'omnivore'],
+    glutenFree: true,
+    lactoseFree: true,
+    highVitaminK: true,
+    highPurine: true,
+    containsGrapefruit: false,
+    ingredients: ['masoor_dal', 'spinach', 'white_rice'],
+    clinicalNotes: 'Blocked in Gout (high purine), CKD/Hyperkalemia (690mg K+), T2DM (GI 67), and Warfarin (Spinach Vit K).'
+  }
+];
+
+// ============================================================================
+// 4. DETERMINISTIC CLINICAL RULE ENGINE (PURE JAVASCRIPT - ZERO LLM GUESSWORK)
+// ============================================================================
+function evaluateClinicalProfile(profile) {
+  const { age, sex, heightCm, weightKg, activityLevel, primaryGoal, diagnoses, labs, medications, dietType, allergiesAndPrefs } = profile;
+
+  // 1. Anthropometrics: BMI, Ideal Body Weight (Devine), Adjusted Body Weight
+  const heightM = heightCm / 100;
+  const bmi = +(weightKg / (heightM * heightM)).toFixed(1);
+  let bmiCategory = 'Normal Weight';
+  if (bmi < 18.5) bmiCategory = 'Underweight';
+  else if (bmi >= 23 && bmi < 25) bmiCategory = 'Overweight (Asian-Indian Cutoff)';
+  else if (bmi >= 25 && bmi < 30) bmiCategory = 'Obese Class I';
+  else if (bmi >= 30) bmiCategory = 'Obese Class II';
+
+  const heightInches = heightCm / 2.54;
+  const inchesOver5Ft = Math.max(0, heightInches - 60);
+  const ibwKg = +((sex === 'male' ? 50 : 45.5) + 2.3 * inchesOver5Ft).toFixed(1);
+
+  // Use Adjusted Body Weight if obese (BMI >= 30) to avoid overfeeding
+  const dosingWeightKg = bmi >= 30
+    ? +(ibwKg + 0.4 * (weightKg - ibwKg)).toFixed(1)
+    : weightKg;
+
+  // 2. Renal Function: 2021 CKD-EPI Creatinine Race-Free Equation
+  const scr = Math.max(0.4, Number(labs.creatinine) || 1.0);
+  const kappa = sex === 'female' ? 0.7 : 0.9;
+  const alpha = sex === 'female' ? -0.241 : -0.302;
+  const sexMultiplier = sex === 'female' ? 1.012 : 1.0;
+  const minRatio = Math.min(scr / kappa, 1);
+  const maxRatio = Math.max(scr / kappa, 1);
+  const egfr = Math.round(
+    142 * Math.pow(minRatio, alpha) * Math.pow(maxRatio, -1.200) * Math.pow(0.9938, age) * sexMultiplier
+  );
+
+  let ckdStageFromEgfr = 'G1 (Normal >= 90)';
+  if (egfr < 15) ckdStageFromEgfr = 'G5 (Kidney Failure < 15)';
+  else if (egfr < 30) ckdStageFromEgfr = 'G4 (Severely Decreased 15-29)';
+  else if (egfr < 45) ckdStageFromEgfr = 'G3b (Mod-Severely Decreased 30-44)';
+  else if (egfr < 60) ckdStageFromEgfr = 'G3a (Mild-Mod Decreased 45-59)';
+  else if (egfr < 90) ckdStageFromEgfr = 'G2 (Mildly Decreased 60-89)';
+
+  // 3. Basal Metabolic Rate (Mifflin-St Jeor) & TDEE
+  const bmr = Math.round(
+    10 * dosingWeightKg + 6.25 * heightCm - 5 * age + (sex === 'male' ? 5 : -161)
+  );
+  const activityMultipliers = {
+    sedentary: 1.2,
+    light: 1.375,
+    moderate: 1.55,
+    active: 1.725
+  };
+  const tdee = Math.round(bmr * (activityMultipliers[activityLevel] || 1.2));
+
+  // Caloric Target Adjustment
+  let targetCalories = tdee;
+  let calorieAdjustmentReason = 'Maintenance TDEE';
+  if (primaryGoal === 'weight_loss' || (bmi >= 25 && primaryGoal === 'glycemic_control')) {
+    targetCalories = Math.max(1350, tdee - 400);
+    calorieAdjustmentReason = 'Moderate -400 kcal/day deficit for visceral adiposity & insulin sensitivity';
+  } else if (bmi < 18.5) {
+    targetCalories = tdee + 250;
+    calorieAdjustmentReason = '+250 kcal/day restorative surplus for BMI < 18.5';
+  }
+
+  // 4. Deterministic Rule Engine Initialization
+  const triggeredRules = [];
+  const drugNutrientAlerts = [];
+
+  // Default Macro & Electrolyte Parameters
+  let carbPctTarget = 0.50;
+  let maxGiLimit = 70;
+  let proteinGPerKg = activityLevel === 'active' ? 1.2 : 1.0;
+  let sodiumCeilingMg = 2300;
+  let potassiumCeilingMg = 4500;
+  let perMealPotassiumMaxMg = 950;
+  let restrictHighPurine = false;
+  let restrictHighVitaminK = false;
+  let blockGrapefruit = false;
+
+  // --- CHECK GLYCEMIC RULE (T2DM or HbA1c >= 6.5 or FBG >= 126) ---
+  const hasDiabetes = diagnoses.includes('t2dm') || labs.hba1c >= 6.5 || labs.fbg >= 126 || primaryGoal === 'glycemic_control';
+  const hasPrediabetes = !hasDiabetes && (labs.hba1c >= 5.7 || labs.fbg >= 100);
+
+  if (hasDiabetes) {
+    carbPctTarget = 0.42; // Cap carbohydrates at 42% of total energy
+    maxGiLimit = 55;      // Enforce strictly Low-GI (<= 55)
+    triggeredRules.push({
+      code: 'RULE-GLYC-01',
+      severity: 'high',
+      title: 'Diabetic Glycemic Ceiling & Low-GI Protocol',
+      trigger: `T2DM Diagnosis=${diagnoses.includes('t2dm') ? 'Yes' : 'No'} | HbA1c=${labs.hba1c}% | FBG=${labs.fbg} mg/dL`,
+      action: 'Caps daily carbohydrates at 42% of total kcal, enforces strict Glycemic Index <= 55, and distributes carbohydrate load across 5 timed meals to blunt postprandial spikes and stabilize fasting blood glucose.'
+    });
+  } else if (hasPrediabetes) {
+    carbPctTarget = 0.45;
+    maxGiLimit = 58;
+    triggeredRules.push({
+      code: 'RULE-GLYC-02',
+      severity: 'medium',
+      title: 'Impaired Fasting Glucose / Prediabetes Guardrail',
+      trigger: `HbA1c=${labs.hba1c}% | FBG=${labs.fbg} mg/dL`,
+      action: 'Moderates carbohydrates to 45% of total kcal and limits Glycemic Index <= 58.'
+    });
+  }
+
+  // --- CHECK RENAL GLOMERULAR PRESERVATION RULE ---
+  const hasModerateSevereCkd = diagnoses.includes('ckd_3') || diagnoses.includes('ckd_4') || egfr < 60;
+  const hasMildCkd = !hasModerateSevereCkd && (diagnoses.includes('ckd_1_2') || primaryGoal === 'renal_preservation');
+
+  if (hasModerateSevereCkd) {
+    proteinGPerKg = 0.8; // KDIGO non-dialysis CKD Stage 3-4 guideline: 0.8 g/kg/day
+    sodiumCeilingMg = Math.min(sodiumCeilingMg, 1800);
+    triggeredRules.push({
+      code: 'RULE-RENAL-01',
+      severity: 'critical',
+      title: 'KDIGO Non-Dialysis CKD Protein & Sodium Restriction',
+      trigger: `eGFR=${egfr} mL/min/1.73m² (${ckdStageFromEgfr}) | CKD Stage 3/4 Active`,
+      action: `Caps dietary protein strictly at 0.8 g/kg IBW (${Math.round(0.8 * ibwKg)}g/day) to reduce intraglomerular hypertension and hyperfiltration. Restricts Sodium <= 1800 mg/day.`
+    });
+  } else if (hasMildCkd) {
+    proteinGPerKg = 0.9;
+    sodiumCeilingMg = Math.min(sodiumCeilingMg, 2000);
+    triggeredRules.push({
+      code: 'RULE-RENAL-02',
+      severity: 'medium',
+      title: 'Early Renal Preservation Protocol',
+      trigger: `CKD Stage 1-2 or Renal Goal | eGFR=${egfr} mL/min/1.73m²`,
+      action: `Moderates protein to 0.9 g/kg IBW (${Math.round(0.9 * ibwKg)}g/day) and caps Sodium <= 2000 mg/day.`
+    });
+  }
+
+  // --- CHECK POTASSIUM & HYPERKALEMIA RULE ---
+  const onRaasOrKsparing = medications.includes('ace_arb') || medications.includes('spironolactone');
+  const dualRaasBlockade = medications.includes('ace_arb') && medications.includes('spironolactone');
+  const hasHyperkalemiaRisk = labs.potassium >= 5.0 || hasModerateSevereCkd || dualRaasBlockade || medications.includes('spironolactone');
+
+  if (hasHyperkalemiaRisk) {
+    potassiumCeilingMg = 2000;
+    perMealPotassiumMaxMg = 400;
+    triggeredRules.push({
+      code: 'RULE-ELEC-01',
+      severity: 'critical',
+      title: 'Strict Hyperkalemia & Renal Potassium Ceiling',
+      trigger: `Serum K+=${labs.potassium} mEq/L | eGFR=${egfr} | RAAS/K-Sparing Meds=${onRaasOrKsparing ? 'Yes' : 'No'}`,
+      action: 'Enforces dietary Potassium ceiling <= 2000 mg/day (max 400 mg/meal). Automatically blocks high-potassium foods (spinach, potato, banana, coconut water, guava).'
+    });
+  } else if (medications.includes('ace_arb') || labs.potassium >= 4.7) {
+    potassiumCeilingMg = 3000;
+    perMealPotassiumMaxMg = 550;
+    triggeredRules.push({
+      code: 'RULE-ELEC-02',
+      severity: 'medium',
+      title: 'Moderate Potassium Vigilance (ACEi/ARB Therapy)',
+      trigger: `Serum K+=${labs.potassium} mEq/L | ACE Inhibitor / ARB Active`,
+      action: 'Caps daily Potassium at 3000 mg/day (max 550 mg/meal) to prevent medication-induced serum K+ elevation.'
+    });
+  }
+
+  // --- CHECK HYPERTENSION / DASH SODIUM RULE ---
+  const hasHypertension = diagnoses.includes('htn') || primaryGoal === 'bp_control' || allergiesAndPrefs.includes('low_sodium');
+  if (hasHypertension) {
+    const strictDash = diagnoses.includes('htn') && (hasModerateSevereCkd || hasDiabetes);
+    sodiumCeilingMg = Math.min(sodiumCeilingMg, strictDash ? 1500 : 2000);
+    triggeredRules.push({
+      code: 'RULE-DASH-01',
+      severity: strictDash ? 'high' : 'medium',
+      title: 'Hypertension Sodium Ceiling Protocol',
+      trigger: `HTN=${diagnoses.includes('htn') ? 'Yes' : 'No'} | Low-Sodium Pref=${allergiesAndPrefs.includes('low_sodium') ? 'Yes' : 'No'}`,
+      action: `Caps dietary Sodium at <= ${sodiumCeilingMg} mg/day (< ${Math.round(sodiumCeilingMg / 4.5)} mg per main meal) to reduce extracellular fluid volume and arterial pressure.`
+    });
+  }
+
+  // --- CHECK HYPERURICEMIA / GOUT RULE ---
+  const hasGoutOrHyperuricemia = diagnoses.includes('gout') || labs.uricAcid > 7.0;
+  if (hasGoutOrHyperuricemia) {
+    restrictHighPurine = true;
+    triggeredRules.push({
+      code: 'RULE-GOUT-01',
+      severity: 'high',
+      title: 'Hyperuricemia Low-Purine Restriction',
+      trigger: `Gout=${diagnoses.includes('gout') ? 'Yes' : 'No'} | Serum Uric Acid=${labs.uricAcid} mg/dL`,
+      action: 'Blocks high-purine recipes (poultry/meat extracts, concentrated red lentils/masoor, spinach/chickpea heavy loads) and recommends 2.5L fluid intake (unless fluid-restricted).'
+    });
+  }
+
+  // --- CHECK DYSLIPIDEMIA RULE ---
+  if (diagnoses.includes('dyslipidemia') || medications.includes('statin')) {
+    triggeredRules.push({
+      code: 'RULE-LIPID-01',
+      severity: 'medium',
+      title: 'Cardiometabolic Soluble Fiber & Lipid Guardrail',
+      trigger: `Dyslipidemia=${diagnoses.includes('dyslipidemia') ? 'Yes' : 'No'} | Statin=${medications.includes('statin') ? 'Yes' : 'No'}`,
+      action: 'Prioritizes beta-glucan oats, millets, chia/walnut omega-3s, and limits saturated fats < 7% of total calories.'
+    });
+  }
+
+  // --- CHECK DRUG-NUTRIENT INTERACTIONS ---
+  if (medications.includes('metformin')) {
+    drugNutrientAlerts.push({
+      drug: 'Metformin (Biguanide)',
+      interaction: 'Vitamin B12 Malabsorption & Meal Timing',
+      directive: 'Take with meals to minimize GI intolerance. Monitor serum Vitamin B12 annually; include curd/paneer or fortified foods.'
+    });
+  }
+  if (medications.includes('sulfonylurea_insulin')) {
+    drugNutrientAlerts.push({
+      drug: 'Sulfonylureas / Insulin',
+      interaction: 'Nocturnal & Inter-Meal Hypoglycemia Risk',
+      directive: 'Never skip the 5th meal (Dinner) or evening snack. Pair complex low-GI carbohydrates with slow-digesting protein.'
+    });
+  }
+  if (medications.includes('ace_arb') || medications.includes('spironolactone')) {
+    drugNutrientAlerts.push({
+      drug: 'ACEi / ARB / Spironolactone',
+      interaction: 'Aldosterone Suppression -> Hyperkalemia Risk',
+      directive: 'Avoid potassium-enriched salt substitutes (KCl), tender coconut water, banana, and un-leached spinach/potato.'
+    });
+  }
+  if (medications.includes('warfarin')) {
+    restrictHighVitaminK = true;
+    drugNutrientAlerts.push({
+      drug: 'Warfarin (Vitamin K Antagonist)',
+      interaction: 'Vitamin K1 (Phylloquinone) INR Antagonism',
+      directive: 'Rule engine blocks sudden high-Vitamin-K leafy green meals (e.g., Palak/Spinach dishes) to keep INR therapeutic and stable.'
+    });
+    triggeredRules.push({
+      code: 'RULE-DRUG-WARF',
+      severity: 'critical',
+      title: 'Warfarin Vitamin K Consistency Lock',
+      trigger: 'Active Medication: Warfarin',
+      action: 'Blocks concentrated phylloquinone (Spinach/Palak) recipes to prevent sub-therapeutic INR fluctuations.'
+    });
+  }
+  if (medications.includes('statin')) {
+    blockGrapefruit = true;
+    drugNutrientAlerts.push({
+      drug: 'HMG-CoA Reductase Inhibitor (Statin)',
+      interaction: 'Intestinal CYP3A4 Inhibition by Furanocoumarins',
+      directive: 'Strictly blocks grapefruit and pomelo to prevent toxic statin plasma accumulation and rhabdomyolysis risk.'
+    });
+  }
+  if (medications.includes('loop_thiazide')) {
+    drugNutrientAlerts.push({
+      drug: 'Loop / Thiazide Diuretic',
+      interaction: 'Urinary Electrolyte & Uric Acid Shift',
+      directive: 'Monitor serum sodium, potassium, magnesium, and uric acid; adhere strictly to the prescribed sodium ceiling.'
+    });
+  }
+
+  // 5. Final Macronutrient Grams Calculation
+  // Use IBW for protein calculation when CKD is present or BMI >= 27
+  const proteinRefWeight = (hasModerateSevereCkd || bmi >= 27) ? ibwKg : weightKg;
+  const targetProteinG = Math.round(proteinRefWeight * proteinGPerKg);
+  const proteinCalories = targetProteinG * 4;
+
+  const targetCarbsG = Math.round((targetCalories * carbPctTarget) / 4);
+  const carbCalories = targetCarbsG * 4;
+
+  const remainingFatCalories = Math.max(targetCalories * 0.20, targetCalories - proteinCalories - carbCalories);
+  const targetFatG = Math.round(remainingFatCalories / 9);
+
+  return {
+    anthropometrics: {
+      bmi,
+      bmiCategory,
+      ibwKg,
+      dosingWeightKg,
+      egfr,
+      ckdStageFromEgfr
+    },
+    targets: {
+      bmr,
+      tdee,
+      calories: targetCalories,
+      calorieAdjustmentReason,
+      proteinG: targetProteinG,
+      proteinGPerKg: +proteinGPerKg.toFixed(2),
+      carbsG: targetCarbsG,
+      carbPct: Math.round(carbPctTarget * 100),
+      fatG: targetFatG,
+      sodiumCeilingMg,
+      potassiumCeilingMg,
+      perMealPotassiumMaxMg,
+      maxGiLimit,
+      restrictHighPurine,
+      restrictHighVitaminK,
+      blockGrapefruit
+    },
+    triggeredRules,
+    drugNutrientAlerts
+  };
+}
+
+// ============================================================================
+// 5. DETERMINISTIC RECIPE FILTERING & PORTION SCALING ENGINE
+// ============================================================================
+const MEAL_SLOTS = [
+  { key: 'breakfast', label: 'Breakfast', time: '08:00 AM', kcalShare: 0.23 },
+  { key: 'mid_morning', label: 'Mid-Morning Snack', time: '11:00 AM', kcalShare: 0.10 },
+  { key: 'lunch', label: 'Lunch', time: '01:30 PM', kcalShare: 0.31 },
+  { key: 'evening', label: 'Evening Snack', time: '05:00 PM', kcalShare: 0.11 },
+  { key: 'dinner', label: 'Dinner', time: '08:00 PM', kcalShare: 0.25 }
+];
+
+function evaluateRecipeCompliance(recipe, profile, clinicalEval, pantryItems) {
+  const reasons = [];
+  const { targets } = clinicalEval;
+
+  // 1. Check Diet Type Compatibility
+  if (!recipe.dietTypes.includes(profile.dietType)) {
+    reasons.push(`Diet mismatch: Recipe not suitable for ${profile.dietType} profile`);
+  }
+
+  // 2. Check Allergies / Intolerances
+  if (profile.allergiesAndPrefs.includes('gluten_free') && !recipe.glutenFree) {
+    reasons.push('Blocked by Gluten-Free requirement (contains wheat/gluten)');
+  }
+  if (profile.allergiesAndPrefs.includes('lactose_free') && !recipe.lactoseFree) {
+    reasons.push('Blocked by Lactose-Free requirement (contains dairy curd/paneer)');
+  }
+
+  // 3. Check Glycemic Index Ceiling
+  if (recipe.gi > targets.maxGiLimit) {
+    reasons.push(`RULE-GLYC-01: Glycemic Index (${recipe.gi}) exceeds clinical ceiling (<= ${targets.maxGiLimit})`);
+  }
+
+  // 4. Check Potassium Ceiling per Meal
+  if (recipe.potassiumMg > targets.perMealPotassiumMaxMg) {
+    reasons.push(`RULE-ELEC-01: Potassium (${recipe.potassiumMg} mg) exceeds per-meal renal limit (${targets.perMealPotassiumMaxMg} mg)`);
+  }
+
+  // 5. Check Sodium Ceiling per Meal
+  const mealSodiumCap = Math.round(targets.sodiumCeilingMg * 0.32);
+  if (recipe.sodiumMg > mealSodiumCap) {
+    reasons.push(`RULE-DASH-01: Sodium (${recipe.sodiumMg} mg) exceeds per-meal sodium cap (${mealSodiumCap} mg)`);
+  }
+
+  // 6. Check Warfarin Vitamin K Lock
+  if (targets.restrictHighVitaminK && recipe.highVitaminK) {
+    reasons.push('RULE-DRUG-WARF: High Vitamin K1 (Spinach/Leafy Greens) blocked due to active Warfarin therapy');
+  }
+
+  // 7. Check Gout / Hyperuricemia Purine Lock
+  if (targets.restrictHighPurine && recipe.highPurine) {
+    reasons.push('RULE-GOUT-01: High-purine ingredients blocked due to Hyperuricemia / Gout protocol');
+  }
+
+  // 8. Check Statin Grapefruit CYP3A4 Lock
+  if (targets.blockGrapefruit && recipe.containsGrapefruit) {
+    reasons.push('RULE-LIPID-01: Contains Grapefruit/Pomelo (CYP3A4 inhibitor contraindicated with Statins)');
+  }
+
+  // Compute Pantry Coverage
+  const inStockSet = new Set(pantryItems.filter(i => i.inStock).map(i => i.id));
+  const totalIngs = recipe.ingredients.length;
+  const availableIngs = recipe.ingredients.filter(id => inStockSet.has(id));
+  const missingIngs = recipe.ingredients.filter(id => !inStockSet.has(id));
+  const pantryMatchRatio = totalIngs > 0 ? availableIngs.length / totalIngs : 1;
+
+  return {
+    compliant: reasons.length === 0,
+    reasons,
+    pantryMatchRatio,
+    availableIngs,
+    missingIngs
+  };
+}
+
+function generateDailyMealPlan(profile, clinicalEval, pantryItems, mealOverrides, prioritizePantry) {
+  const { targets } = clinicalEval;
+  const selectedMeals = [];
+  const blockedRecipesLog = [];
+
+  // First log all blocked recipes across the database for transparency
+  CLINICAL_RECIPES.forEach(recipe => {
+    const check = evaluateRecipeCompliance(recipe, profile, clinicalEval, pantryItems);
+    if (!check.compliant) {
+      blockedRecipesLog.push({
+        recipe,
+        reasons: check.reasons
+      });
+    }
+  });
+
+  MEAL_SLOTS.forEach(slotObj => {
+    const slotDesiredKcal = targets.calories * slotObj.kcalShare;
+    const candidates = CLINICAL_RECIPES
+      .filter(r => r.slot === slotObj.key)
+      .map(r => ({
+        recipe: r,
+        evalResult: evaluateRecipeCompliance(r, profile, clinicalEval, pantryItems)
+      }))
+      .filter(item => item.evalResult.compliant);
+
+    // Sort candidates deterministically:
+    // If prioritizePantry is enabled, sort by pantryMatchRatio DESC, then lowest GI
+    candidates.sort((a, b) => {
+      if (prioritizePantry && b.evalResult.pantryMatchRatio !== a.evalResult.pantryMatchRatio) {
+        return b.evalResult.pantryMatchRatio - a.evalResult.pantryMatchRatio;
+      }
+      return a.recipe.gi - b.recipe.gi;
+    });
+
+    // Check if user manually swapped a meal for this slot and it is still compliant
+    const overrideId = mealOverrides[slotObj.key];
+    let chosenItem = candidates.find(c => c.recipe.id === overrideId) || candidates[0];
+
+    // Fallback safety if all candidates in slot were somehow filtered out
+    if (!chosenItem) {
+      const fallback = CLINICAL_RECIPES.find(r => r.slot === slotObj.key);
+      chosenItem = {
+        recipe: fallback,
+        evalResult: evaluateRecipeCompliance(fallback, profile, clinicalEval, pantryItems)
+      };
+    }
+
+    // Portion scaling factor (clamped between 0.65x and 1.45x so electrolytes never breach safety caps)
+    const rawScale = slotDesiredKcal / chosenItem.recipe.calories;
+    const maxSafePotassiumScale = targets.perMealPotassiumMaxMg / Math.max(1, chosenItem.recipe.potassiumMg);
+    const scaleFactor = Math.min(1.45, Math.max(0.65, Math.min(rawScale, maxSafePotassiumScale * 0.95)));
+    const roundedScale = +(Math.round(scaleFactor * 20) / 20).toFixed(2);
+
+    const r = chosenItem.recipe;
+    selectedMeals.push({
+      slotKey: slotObj.key,
+      slotLabel: slotObj.label,
+      slotTime: slotObj.time,
+      recipe: r,
+      scaleFactor: roundedScale,
+      scaledMacros: {
+        calories: Math.round(r.calories * roundedScale),
+        carbsG: Math.round(r.carbsG * roundedScale),
+        proteinG: Math.round(r.proteinG * roundedScale),
+        fatG: Math.round(r.fatG * roundedScale),
+        sodiumMg: Math.round(r.sodiumMg * roundedScale),
+        potassiumMg: Math.round(r.potassiumMg * roundedScale)
+      },
+      pantryInfo: chosenItem.evalResult,
+      alternatives: candidates.map(c => ({
+        recipe: c.recipe,
+        pantryInfo: c.evalResult
+      }))
+    });
+  });
+
+  const dailyTotals = selectedMeals.reduce(
+    (acc, m) => ({
+      calories: acc.calories + m.scaledMacros.calories,
+      carbsG: acc.carbsG + m.scaledMacros.carbsG,
+      proteinG: acc.proteinG + m.scaledMacros.proteinG,
+      fatG: acc.fatG + m.scaledMacros.fatG,
+      sodiumMg: acc.sodiumMg + m.scaledMacros.sodiumMg,
+      potassiumMg: acc.potassiumMg + m.scaledMacros.potassiumMg
+    }),
+    { calories: 0, carbsG: 0, proteinG: 0, fatG: 0, sodiumMg: 0, potassiumMg: 0 }
+  );
+
+  return {
+    selectedMeals,
+    dailyTotals,
+    blockedRecipesLog
+  };
+}
+
+// ============================================================================
+// 6. MAIN REACT COMPONENT
+// ============================================================================
+export default function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('intake'); // intake, rules, meals, pantry, apk
+  const [mobileFrameMode, setMobileFrameMode] = useState(false);
+
+  // Local-First Persistent State
+  const [profile, setProfile] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PROFILE);
+      return saved ? JSON.parse(saved) : DEFAULT_PROFILE;
+    } catch {
+      return DEFAULT_PROFILE;
+    }
+  });
+
+  const [pantryItems, setPantryItems] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PANTRY);
+      return saved ? JSON.parse(saved) : INITIAL_PANTRY_ITEMS;
+    } catch {
+      return INITIAL_PANTRY_ITEMS;
+    }
+  });
+
+  const [mealOverrides, setMealOverrides] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.MEAL_OVERRIDES);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [prioritizePantry, setPrioritizePantry] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PRIORITIZE_PANTRY);
+      return saved ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  // UI Modals & Toast Feedback
+  const [toastMsg, setToastMsg] = useState(null);
+  const [swapModalSlot, setSwapModalSlot] = useState(null);
+  const [showBlockedRecipes, setShowBlockedRecipes] = useState(false);
+  const [confirmWipeModal, setConfirmWipeModal] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importJsonText, setImportJsonText] = useState('');
+  const [pantrySearch, setPantrySearch] = useState('');
+  const [pantryCategoryFilter, setPantryCategoryFilter] = useState('All');
+  const [newPantryItemName, setNewPantryItemName] = useState('');
+  const [copiedSnippet, setCopiedSnippet] = useState(null);
+
+  // Sync changes to LocalStorage automatically
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
+    } catch (e) {
+      console.error('Local storage write failed', e);
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(pantryItems));
+    } catch (e) {
+      console.error('Local storage write failed', e);
+    }
+  }, [pantryItems]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.MEAL_OVERRIDES, JSON.stringify(mealOverrides));
+    } catch (e) {
+      console.error('Local storage write failed', e);
+    }
+  }, [mealOverrides]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PRIORITIZE_PANTRY, JSON.stringify(prioritizePantry));
+    } catch (e) {
+      console.error('Local storage write failed', e);
+    }
+  }, [prioritizePantry]);
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3200);
+  };
+
+  // Run Deterministic Clinical Rule Engine
+  const clinicalEval = useMemo(() => evaluateClinicalProfile(profile), [profile]);
+
+  // Run Deterministic Meal Plan Generator
+  const mealPlanData = useMemo(
+    () => generateDailyMealPlan(profile, clinicalEval, pantryItems, mealOverrides, prioritizePantry),
+    [profile, clinicalEval, pantryItems, mealOverrides, prioritizePantry]
+  );
+
+  // Evaluate Pantry Contraindications against current clinical rules
+  const annotatedPantry = useMemo(() => {
+    const { targets } = clinicalEval;
+    return pantryItems.map(item => {
+      const flags = [];
+      if (item.gi > targets.maxGiLimit) {
+        flags.push({ type: 'danger', label: `High GI (${item.gi}) > ${targets.maxGiLimit}` });
+      }
+      if (targets.potassiumCeilingMg <= 2000 && item.potassiumMgPer100g >= 350) {
+        flags.push({ type: 'danger', label: `High K+ (${item.potassiumMgPer100g}mg)` });
+      } else if (targets.potassiumCeilingMg <= 3000 && item.potassiumMgPer100g >= 450) {
+        flags.push({ type: 'warning', label: `Moderate-High K+` });
+      }
+      if (targets.restrictHighVitaminK && item.vitaminKHigh) {
+        flags.push({ type: 'danger', label: 'Warfarin Vit-K Alert' });
+      }
+      if (targets.restrictHighPurine && item.purineHigh) {
+        flags.push({ type: 'warning', label: 'High Purine (Gout)' });
+      }
+      if (targets.blockGrapefruit && item.citrusCyp3a4) {
+        flags.push({ type: 'danger', label: 'Statin CYP3A4 Block' });
+      }
+      if (profile.allergiesAndPrefs.includes('gluten_free') && item.gluten) {
+        flags.push({ type: 'warning', label: 'Contains Gluten' });
+      }
+      if (profile.allergiesAndPrefs.includes('lactose_free') && item.lactose) {
+        flags.push({ type: 'warning', label: 'Contains Lactose' });
+      }
+      return { ...item, clinicalFlags: flags };
+    });
+  }, [pantryItems, clinicalEval, profile.allergiesAndPrefs]);
+
+  // Compute Missing Ingredients Shopping List for Active Meal Plan
+  const missingShoppingList = useMemo(() => {
+    const missingIds = new Set();
+    mealPlanData.selectedMeals.forEach(m => {
+      m.pantryInfo.missingIngs.forEach(id => missingIds.add(id));
+    });
+    return pantryItems.filter(i => missingIds.has(i.id));
+  }, [mealPlanData, pantryItems]);
+
+  // Handlers
+  const applyPreset = (preset) => {
+    setProfile(preset.profile);
+    setMealOverrides({});
+    showToast(`Loaded Preset: ${preset.label}`);
+  };
+
+  const toggleArrayItem = (list, item) =>
+    list.includes(item) ? list.filter(i => i !== item) : [...list, item];
+
+  const handleExportData = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      appVersion: '1.0.0-local-apk',
+      profile,
+      pantryItems,
+      mealOverrides
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clinidiet_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exported encrypted-ready JSON backup to device');
+  };
+
+  const handleImportData = () => {
+    try {
+      const parsed = JSON.parse(importJsonText);
+      if (parsed.profile) setProfile(parsed.profile);
+      if (Array.isArray(parsed.pantryItems)) setPantryItems(parsed.pantryItems);
+      if (parsed.mealOverrides) setMealOverrides(parsed.mealOverrides);
+      setImportModalOpen(false);
+      setImportJsonText('');
+      showToast('Successfully restored local clinical profile & pantry');
+    } catch {
+      showToast('Invalid JSON format. Please check the backup content.');
+    }
+  };
+
+  const handleWipeLocalData = () => {
+    localStorage.removeItem(STORAGE_KEYS.PROFILE);
+    localStorage.removeItem(STORAGE_KEYS.PANTRY);
+    localStorage.removeItem(STORAGE_KEYS.MEAL_OVERRIDES);
+    setProfile(DEFAULT_PROFILE);
+    setPantryItems(INITIAL_PANTRY_ITEMS);
+    setMealOverrides({});
+    setConfirmWipeModal(false);
+    showToast('All on-device data wiped & reset to factory defaults');
+  };
+
+  const handleAddCustomPantryItem = (e) => {
+    e.preventDefault();
+    if (!newPantryItemName.trim()) return;
+    const newItem = {
+      id: 'custom_' + Date.now(),
+      name: newPantryItemName.trim(),
+      category: 'Vegetables & Greens',
+      inStock: true,
+      gi: 35,
+      potassiumMgPer100g: 180,
+      sodiumMgPer100g: 10,
+      vitaminKHigh: false,
+      purineHigh: false,
+      gluten: false
+    };
+    setPantryItems(prev => [newItem, ...prev]);
+    setNewPantryItemName('');
+    showToast(`Added "${newItem.name}" to local pantry`);
+  };
+
+  const copyCode = (key, text) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedSnippet(key);
+    setTimeout(() => setCopiedSnippet(null), 2000);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start selection:bg-teal-500 selection:text-white">
+      {/* Top Bar / Privacy & Device Frame Controls */}
+      <div className="w-full bg-slate-900/90 border-b border-slate-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 z-30">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/90 text-emerald-300 border border-emerald-700/60">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            100% Local On-Device Storage • Offline Ready • Zero LLM Hallucination
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMobileFrameMode(!mobileFrameMode)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+            title="Toggle between Android Phone Frame and Full Clinical View"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-teal-400" />
+            {mobileFrameMode ? 'Full Workstation View' : 'Android Phone Shell'}
+          </button>
+          <button
+            onClick={handleExportData}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+          >
+            <Download className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Export JSON</span>
+          </button>
+          <button
+            onClick={() => setImportModalOpen(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+          >
+            <Upload className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Import</span>
+          </button>
+          <button
+            onClick={() => setConfirmWipeModal(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 border border-rose-800/60 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden sm:inline">Wipe Local</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main App Shell Container */}
+      <div
+        className={`w-full transition-all duration-300 flex flex-col ${
+          mobileFrameMode
+            ? 'max-w-[430px] my-4 rounded-[36px] border-[6px] border-slate-800 shadow-2xl bg-slate-900 overflow-hidden min-h-[820px]'
+            : 'max-w-5xl flex-1 bg-slate-900/60'
+        }`}
+      >
+        {/* App Header Banner */}
+        <header className="bg-gradient-to-r from-teal-950 via-slate-900 to-slate-900 border-b border-slate-800 px-4 py-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-teal-500/15 border border-teal-500/40 flex items-center justify-center text-teal-400">
+                <HeartPulse className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
+                    CliniDiet Rx
+                  </h1>
+                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                    v2.4 APK-Ready
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Deterministic Clinical Nutrition & Renal/Glycemic Rule Engine
+                </p>
+              </div>
+            </div>
+
+            {/* Live Patient Quick Telemetry Pill */}
+            <div className="text-right bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5">
+              <div className="text-[11px] font-medium text-slate-400 truncate max-w-[140px]">
+                {profile.name}
+              </div>
+              <div className="flex items-center justify-end gap-2 text-xs font-semibold">
+                <span className="text-teal-400">{clinicalEval.targets.calories} kcal</span>
+                <span className="text-slate-600">•</span>
+                <span
+                  className={
+                    clinicalEval.anthropometrics.egfr < 60 ? 'text-amber-400' : 'text-emerald-400'
+                  }
+                >
+                  eGFR {clinicalEval.anthropometrics.egfr}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Clinical Alert Strip */}
+          {clinicalEval.triggeredRules.length > 0 && (
+            <div className="mt-3 flex items-center justify-between gap-2 bg-slate-950/90 border border-slate-800/90 rounded-lg px-3 py-1.5 text-xs">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+                <span className="inline-flex items-center gap-1 text-amber-400 font-semibold shrink-0">
+                  <Cpu className="w-3.5 h-3.5" />
+                  {clinicalEval.triggeredRules.length} Active Rules:
+                </span>
+                {clinicalEval.triggeredRules.map(rule => (
+                  <span
+                    key={rule.code}
+                    onClick={() => setActiveTab('rules')}
+                    className={`cursor-pointer px-2 py-0.5 rounded text-[11px] font-mono shrink-0 border ${
+                      rule.severity === 'critical'
+                        ? 'bg-rose-950/80 text-rose-300 border-rose-800'
+                        : rule.severity === 'high'
+                        ? 'bg-amber-950/80 text-amber-300 border-amber-800'
+                        : 'bg-sky-950/80 text-sky-300 border-sky-800'
+                    }`}
+                  >
+                    {rule.code}
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={() => setActiveTab('rules')}
+                className="text-teal-400 hover:text-teal-300 font-medium shrink-0 flex items-center gap-0.5"
+              >
+                Inspect <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </header>
+
+        {/* Scrollable Content Viewport */}
+        <main className="flex-1 overflow-y-auto p-4 pb-24 space-y-5">
+          {/* ================================================================
+              TAB 1: PATIENT / USER INTAKE PROFILE SCREEN
+          ================================================================ */}
+          {activeTab === 'intake' && (
+            <div className="space-y-5">
+              {/* Quick Clinical Presets Bar */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2.5">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
+                    <Activity className="w-4 h-4" />
+                    Quick Clinical Test Profiles (1-Tap Load)
+                  </h2>
+                  <span className="text-[11px] text-slate-400">Deterministic Verification</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {CLINICAL_PRESETS.map(preset => (
+                    <button
+                      key={preset.id}
+                      onClick={() => applyPreset(preset)}
+                      className={`text-left p-2.5 rounded-xl border transition flex items-center justify-between ${
+                        profile.name === preset.profile.name
+                          ? 'bg-teal-950/60 border-teal-500/70 text-white'
+                          : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 text-slate-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="text-xs font-semibold text-white">{preset.label}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{preset.badge}</div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-teal-400 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* Real-Time Anthropometrics & Renal eGFR Telemetry Card */}
+              <section className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                    <Scale className="w-3.5 h-3.5 text-teal-400" /> BMI (kg/m²)
+                  </div>
+                  <div className="text-lg font-bold text-white mt-0.5">
+                    {clinicalEval.anthropometrics.bmi}
+                  </div>
+                  <div className="text-[11px] text-teal-300 truncate">
+                    {clinicalEval.anthropometrics.bmiCategory}
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400">Ideal Weight (Devine)</div>
+                  <div className="text-lg font-bold text-white mt-0.5">
+                    {clinicalEval.anthropometrics.ibwKg} <span className="text-xs font-normal">kg</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Dosing Wt: {clinicalEval.anthropometrics.dosingWeightKg} kg
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                    <Droplets className="w-3.5 h-3.5 text-sky-400" /> eGFR (CKD-EPI)
+                  </div>
+                  <div
+                    className={`text-lg font-bold mt-0.5 ${
+                      clinicalEval.anthropometrics.egfr < 60 ? 'text-amber-400' : 'text-emerald-400'
+                    }`}
+                  >
+                    {clinicalEval.anthropometrics.egfr}{' '}
+                    <span className="text-xs font-normal text-slate-400">mL/min</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 truncate">
+                    {clinicalEval.anthropometrics.ckdStageFromEgfr}
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+                  <div className="text-[11px] text-slate-400">Target Energy</div>
+                  <div className="text-lg font-bold text-teal-400 mt-0.5">
+                    {clinicalEval.targets.calories} <span className="text-xs font-normal">kcal</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    BMR {clinicalEval.targets.bmr} • TDEE {clinicalEval.targets.tdee}
+                  </div>
+                </div>
+              </section>
+
+              {/* Biometrics & Demographics Form */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
+                <h3 className="text-sm font-bold text-white border-b border-slate-800 pb-2">
+                  1. Biometrics, Anthropometrics & Primary Clinical Goal
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Profile Identifier</label>
+                    <input
+                      type="text"
+                      value={profile.name}
+                      onChange={e => setProfile({ ...profile, name: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Biological Sex</label>
+                    <select
+                      value={profile.sex}
+                      onChange={e => setProfile({ ...profile, sex: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Age (Years)</label>
+                    <input
+                      type="number"
+                      min={18}
+                      max={100}
+                      value={profile.age}
+                      onChange={e => setProfile({ ...profile, age: Number(e.target.value) || 30 })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Height (cm)</label>
+                    <input
+                      type="number"
+                      min={120}
+                      max={220}
+                      value={profile.heightCm}
+                      onChange={e => setProfile({ ...profile, heightCm: Number(e.target.value) || 165 })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Weight (kg)</label>
+                    <input
+                      type="number"
+                      min={35}
+                      max={200}
+                      value={profile.weightKg}
+                      onChange={e => setProfile({ ...profile, weightKg: Number(e.target.value) || 65 })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Activity Level</label>
+                    <select
+                      value={profile.activityLevel}
+                      onChange={e => setProfile({ ...profile, activityLevel: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                    >
+                      <option value="sedentary">Sedentary (1.2x)</option>
+                      <option value="light">Lightly Active (1.375x)</option>
+                      <option value="moderate">Moderately Active (1.55x)</option>
+                      <option value="active">Very Active (1.725x)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Primary Clinical Goal</label>
+                    <select
+                      value={profile.primaryGoal}
+                      onChange={e => setProfile({ ...profile, primaryGoal: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-teal-500 focus:outline-none"
+                    >
+                      <option value="glycemic_control">Glycemic Control (T2DM)</option>
+                      <option value="renal_preservation">Renal & Electrolyte Safety</option>
+                      <option value="bp_control">Blood Pressure / DASH</option>
+                      <option value="weight_loss">Adiposity / Weight Loss</option>
+                      <option value="maintenance">General Maintenance</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+
+              {/* Lab Values Panel */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h3 className="text-sm font-bold text-white">
+                    2. Recent Bloodwork & Biochemical Lab Panel
+                  </h3>
+                  <span className="text-[11px] text-teal-400 font-mono">
+                    Triggers deterministic thresholds automatically
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Fasting Glucose <span className="text-[10px]">(mg/dL)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={profile.labs.fbg}
+                      onChange={e =>
+                        setProfile({
+                          ...profile,
+                          labs: { ...profile.labs, fbg: Number(e.target.value) }
+                        })
+                      }
+                      className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
+                        profile.labs.fbg >= 126
+                          ? 'border-amber-500/80'
+                          : 'border-slate-800'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      {profile.labs.fbg >= 126 ? '⚠️ Diabetic (>=126)' : 'Normal <100'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      HbA1c <span className="text-[10px]">(%)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={profile.labs.hba1c}
+                      onChange={e =>
+                        setProfile({
+                          ...profile,
+                          labs: { ...profile.labs, hba1c: Number(e.target.value) }
+                        })
+                      }
+                      className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
+                        profile.labs.hba1c >= 6.5
+                          ? 'border-amber-500/80'
+                          : 'border-slate-800'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      {profile.labs.hba1c >= 6.5 ? '⚠️ High (>=6.5%)' : 'Normal <5.7%'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Creatinine <span className="text-[10px]">(mg/dL)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={profile.labs.creatinine}
+                      onChange={e =>
+                        setProfile({
+                          ...profile,
+                          labs: { ...profile.labs, creatinine: Number(e.target.value) }
+                        })
+                      }
+                      className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
+                        clinicalEval.anthropometrics.egfr < 60
+                          ? 'border-rose-500/80'
+                          : 'border-slate-800'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      eGFR: {clinicalEval.anthropometrics.egfr} mL/min
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Potassium K+ <span className="text-[10px]">(mEq/L)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={profile.labs.potassium}
+                      onChange={e =>
+                        setProfile({
+                          ...profile,
+                          labs: { ...profile.labs, potassium: Number(e.target.value) }
+                        })
+                      }
+                      className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
+                        profile.labs.potassium >= 5.0
+                          ? 'border-rose-500/80'
+                          : 'border-slate-800'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      {profile.labs.potassium >= 5.0 ? '🚨 Hyperkalemia (>5.0)' : 'Ref: 3.5-5.0'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Uric Acid <span className="text-[10px]">(mg/dL)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={profile.labs.uricAcid}
+                      onChange={e =>
+                        setProfile({
+                          ...profile,
+                          labs: { ...profile.labs, uricAcid: Number(e.target.value) }
+                        })
+                      }
+                      className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none ${
+                        profile.labs.uricAcid > 7.0
+                          ? 'border-amber-500/80'
+                          : 'border-slate-800'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-400">
+                      {profile.labs.uricAcid > 7.0 ? '⚠️ High Purine Risk' : 'Normal <=7.0'}
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Clinical Diagnoses & Medications */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Diagnoses */}
+                <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                  <h3 className="text-sm font-bold text-white border-b border-slate-800 pb-2">
+                    3. Clinical Diagnoses (Multi-Select)
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 't2dm', label: 'Type 2 Diabetes (T2DM)' },
+                      { id: 'htn', label: 'Hypertension (HTN)' },
+                      { id: 'ckd_1_2', label: 'CKD Stage 1-2 (Mild)' },
+                      { id: 'ckd_3', label: 'CKD Stage 3a/3b (Mod)' },
+                      { id: 'ckd_4', label: 'CKD Stage 4 (Severe)' },
+                      { id: 'dyslipidemia', label: 'Dyslipidemia / High LDL' },
+                      { id: 'gout', label: 'Hyperuricemia / Gout' }
+                    ].map(diag => {
+                      const active = profile.diagnoses.includes(diag.id);
+                      return (
+                        <button
+                          key={diag.id}
+                          onClick={() =>
+                            setProfile({
+                              ...profile,
+                              diagnoses: toggleArrayItem(profile.diagnoses, diag.id)
+                            })
+                          }
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition flex items-center gap-1.5 ${
+                            active
+                              ? 'bg-teal-600/25 border-teal-500 text-teal-200'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}
+                        >
+                          {active && <Check className="w-3.5 h-3.5 text-teal-400" />}
+                          {diag.label}
+                        </button>
+                      );
+                    })}
+                    {profile.diagnoses.length > 0 && (
+                      <button
+                        onClick={() => setProfile({ ...profile, diagnoses: [] })}
+                        className="px-2.5 py-1.5 rounded-xl text-xs text-slate-400 hover:text-white underline"
+                      >
+                        Clear All (Healthy Wellness)
+                      </button>
+                    )}
+                  </div>
+                </section>
+
+                {/* Medications */}
+                <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                  <h3 className="text-sm font-bold text-white border-b border-slate-800 pb-2 flex items-center gap-1.5">
+                    <Pill className="w-4 h-4 text-amber-400" />
+                    4. Active Medications (Drug-Nutrient Engine)
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 'metformin', label: 'Metformin' },
+                      { id: 'sulfonylurea_insulin', label: 'Sulfonylureas / Insulin' },
+                      { id: 'ace_arb', label: 'ACEi / ARB (Telmisartan/Enalapril)' },
+                      { id: 'spironolactone', label: 'Spironolactone (K+ Sparing)' },
+                      { id: 'loop_thiazide', label: 'Loop / Thiazide Diuretic' },
+                      { id: 'statin', label: 'Statin (Atorvastatin/Rosuvastatin)' },
+                      { id: 'warfarin', label: 'Warfarin (Anticoagulant)' }
+                    ].map(med => {
+                      const active = profile.medications.includes(med.id);
+                      return (
+                        <button
+                          key={med.id}
+                          onClick={() =>
+                            setProfile({
+                              ...profile,
+                              medications: toggleArrayItem(profile.medications, med.id)
+                            })
+                          }
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition flex items-center gap-1.5 ${
+                            active
+                              ? 'bg-amber-600/25 border-amber-500 text-amber-200'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}
+                        >
+                          {active && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                          {med.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
+
+              {/* Dietary Preferences & Allergies */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-bold text-white border-b border-slate-800 pb-2">
+                  5. Dietary Pattern & Intolerance Toggles
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1.5">Primary Diet Pattern</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'vegetarian', label: 'Lacto-Vegetarian' },
+                        { id: 'vegan', label: '100% Plant / Vegan' },
+                        { id: 'eggetarian', label: 'Eggetarian' },
+                        { id: 'omnivore', label: 'Omnivore (Poultry/Fish)' }
+                      ].map(d => (
+                        <button
+                          key={d.id}
+                          onClick={() => setProfile({ ...profile, dietType: d.id })}
+                          className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${
+                            profile.dietType === d.id
+                              ? 'bg-teal-600/25 border-teal-500 text-white'
+                              : 'bg-slate-950 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1.5">
+                      Allergies & Specific Restrictions
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { id: 'gluten_free', label: 'Gluten-Free (No Wheat)' },
+                        { id: 'lactose_free', label: 'Lactose / Dairy-Free' },
+                        { id: 'low_sodium', label: 'Strict Low-Sodium' }
+                      ].map(pref => {
+                        const active = profile.allergiesAndPrefs.includes(pref.id);
+                        return (
+                          <button
+                            key={pref.id}
+                            onClick={() =>
+                              setProfile({
+                                ...profile,
+                                allergiesAndPrefs: toggleArrayItem(profile.allergiesAndPrefs, pref.id)
+                              })
+                            }
+                            className={`px-3 py-2 rounded-xl text-xs font-medium border transition flex items-center gap-1.5 ${
+                              active
+                                ? 'bg-sky-600/25 border-sky-500 text-sky-200'
+                                : 'bg-slate-950 border-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {active && <Check className="w-3.5 h-3.5 text-sky-400" />}
+                            {pref.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* CTA to inspect rules or meal plan */}
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <button
+                  onClick={() => setActiveTab('rules')}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5"
+                >
+                  <Cpu className="w-4 h-4 text-teal-400" />
+                  Inspect Deterministic Rules ({clinicalEval.triggeredRules.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('meals')}
+                  className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/60 transition flex items-center gap-1.5"
+                >
+                  <Utensils className="w-4 h-4" />
+                  Generate Compliant Meal Plan
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================
+              TAB 2: DETERMINISTIC CLINICAL RULE ENGINE & INSPECTOR SCREEN
+          ================================================================ */}
+          {activeTab === 'rules' && (
+            <div className="space-y-5">
+              {/* Zero-LLM Guarantee Banner */}
+              <div className="bg-gradient-to-r from-emerald-950/70 to-slate-900 border border-emerald-800/60 rounded-2xl p-4 flex items-start gap-3">
+                <Lock className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <div className="font-bold text-emerald-300">
+                    Deterministic Clinical Rule Engine (Zero Generative AI / Zero Hallucination)
+                  </div>
+                  <p className="text-slate-300 leading-relaxed">
+                    Every macronutrient ceiling, renal electrolyte limit, and drug-nutrient contraindication below is computed via verifiable mathematical equations (Mifflin-St Jeor, Devine IBW, 2021 CKD-EPI eGFR, and KDIGO/ADA clinical thresholds).
+                  </p>
+                </div>
+              </div>
+
+              {/* Computed Targets Grid */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h2 className="text-sm font-bold text-white">
+                    Computed Daily Macro & Electrolyte Prescription
+                  </h2>
+                  <span className="text-[11px] text-slate-400">
+                    {clinicalEval.targets.calorieAdjustmentReason}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Daily Energy Target</div>
+                    <div className="text-xl font-bold text-teal-400 mt-0.5">
+                      {clinicalEval.targets.calories} kcal
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      BMR: {clinicalEval.targets.bmr} | TDEE: {clinicalEval.targets.tdee}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Carbohydrate Ceiling</div>
+                    <div className="text-xl font-bold text-sky-400 mt-0.5">
+                      {clinicalEval.targets.carbsG}g{' '}
+                      <span className="text-xs font-normal text-slate-400">
+                        ({clinicalEval.targets.carbPct}%)
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Max Glycemic Index: &le; {clinicalEval.targets.maxGiLimit}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Protein Target</div>
+                    <div className="text-xl font-bold text-emerald-400 mt-0.5">
+                      {clinicalEval.targets.proteinG}g{' '}
+                      <span className="text-xs font-normal text-slate-400">
+                        ({clinicalEval.targets.proteinGPerKg} g/kg)
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Ref Wt: {clinicalEval.anthropometrics.ibwKg} kg IBW
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Healthy Fats</div>
+                    <div className="text-xl font-bold text-amber-400 mt-0.5">
+                      {clinicalEval.targets.fatG}g
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      MUFA/PUFA &lt;7% Sat Fat
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Sodium Ceiling</div>
+                    <div className="text-lg font-bold text-white mt-0.5">
+                      &le; {clinicalEval.targets.sodiumCeilingMg} mg/day
+                    </div>
+                    <div className="text-[11px] text-slate-500">DASH / Renal Cap</div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Potassium Ceiling</div>
+                    <div
+                      className={`text-lg font-bold mt-0.5 ${
+                        clinicalEval.targets.potassiumCeilingMg <= 2000
+                          ? 'text-rose-400'
+                          : 'text-white'
+                      }`}
+                    >
+                      &le; {clinicalEval.targets.potassiumCeilingMg} mg/day
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Max {clinicalEval.targets.perMealPotassiumMaxMg} mg/meal
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Glycemic Index Cap</div>
+                    <div className="text-lg font-bold text-teal-300 mt-0.5">
+                      GI &le; {clinicalEval.targets.maxGiLimit}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {clinicalEval.targets.maxGiLimit <= 55
+                        ? 'Strict Low-GI Enforced'
+                        : 'Moderate GI Allowed'}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <div className="text-[11px] text-slate-400">Biochemical Locks</div>
+                    <div className="text-xs font-semibold text-slate-200 mt-1 space-y-0.5">
+                      <div>Purine Lock: {clinicalEval.targets.restrictHighPurine ? 'ACTIVE' : 'Off'}</div>
+                      <div>Vit-K Lock: {clinicalEval.targets.restrictHighVitaminK ? 'ACTIVE' : 'Off'}</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Active IF/THEN Clinical Rules Audit Log */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-bold text-white border-b border-slate-800 pb-2 flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-teal-400" />
+                  Triggered Deterministic IF/THEN Clinical Rules ({clinicalEval.triggeredRules.length})
+                </h3>
+
+                {clinicalEval.triggeredRules.length === 0 ? (
+                  <div className="text-xs text-slate-400 py-4 text-center">
+                    No restrictive clinical pathology rules triggered. Standard wellness macronutrient distribution active.
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {clinicalEval.triggeredRules.map(rule => (
+                      <div
+                        key={rule.code}
+                        className={`p-3.5 rounded-xl border ${
+                          rule.severity === 'critical'
+                            ? 'bg-rose-950/30 border-rose-800/70'
+                            : rule.severity === 'high'
+                            ? 'bg-amber-950/30 border-amber-800/70'
+                            : 'bg-slate-950 border-slate-800'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                          <span className="font-bold text-xs text-white flex items-center gap-2">
+                            <span className="font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-teal-300">
+                              {rule.code}
+                            </span>
+                            {rule.title}
+                          </span>
+                          <span className="text-[11px] font-mono text-slate-400">
+                            IF [{rule.trigger}]
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed mt-1">
+                          <strong className="text-teal-400">THEN: </strong>
+                          {rule.action}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* Drug-Nutrient Interaction Alerts */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <h3 className="text-sm font-bold text-white border-b border-slate-800 pb-2 flex items-center gap-2">
+                  <Pill className="w-4 h-4 text-amber-400" />
+                  Pharmacotherapy & Drug-Nutrient Interaction Directives ({clinicalEval.drugNutrientAlerts.length})
+                </h3>
+
+                {clinicalEval.drugNutrientAlerts.length === 0 ? (
+                  <div className="text-xs text-slate-400 py-3">
+                    No active medications selected in Patient Intake Profile.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {clinicalEval.drugNutrientAlerts.map((alertItem, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-950 border border-amber-900/50 rounded-xl p-3 space-y-1"
+                      >
+                        <div className="text-xs font-bold text-amber-300">{alertItem.drug}</div>
+                        <div className="text-[11px] font-semibold text-slate-300">
+                          Mechanism: {alertItem.interaction}
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                          {alertItem.directive}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {/* ================================================================
+              TAB 3: MEAL PLAN GENERATOR SCREEN
+          ================================================================ */}
+          {activeTab === 'meals' && (
+            <div className="space-y-5">
+              {/* Daily Macro & Electrolyte Progress Dashboard */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-bold text-white">
+                      5-Part Portion-Scaled Clinical Meal Plan
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      Automatically scaled to match {clinicalEval.targets.calories} kcal & electrolyte caps
+                    </p>
+                  </div>
+
+                  {/* Toggle Prioritize Pantry */}
+                  <button
+                    onClick={() => setPrioritizePantry(!prioritizePantry)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 ${
+                      prioritizePantry
+                        ? 'bg-teal-950/80 border-teal-500 text-teal-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    Prioritize In-Stock Pantry: {prioritizePantry ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {/* Macro Progress Bars */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                  {[
+                    {
+                      label: 'Calories',
+                      val: mealPlanData.dailyTotals.calories,
+                      target: clinicalEval.targets.calories,
+                      unit: 'kcal',
+                      color: 'bg-teal-500'
+                    },
+                    {
+                      label: 'Carbs',
+                      val: mealPlanData.dailyTotals.carbsG,
+                      target: clinicalEval.targets.carbsG,
+                      unit: 'g',
+                      color: 'bg-sky-500'
+                    },
+                    {
+                      label: 'Protein',
+                      val: mealPlanData.dailyTotals.proteinG,
+                      target: clinicalEval.targets.proteinG,
+                      unit: 'g',
+                      color: 'bg-emerald-500'
+                    },
+                    {
+                      label: 'Fats',
+                      val: mealPlanData.dailyTotals.fatG,
+                      target: clinicalEval.targets.fatG,
+                      unit: 'g',
+                      color: 'bg-amber-500'
+                    },
+                    {
+                      label: 'Sodium',
+                      val: mealPlanData.dailyTotals.sodiumMg,
+                      target: clinicalEval.targets.sodiumCeilingMg,
+                      unit: 'mg',
+                      color: 'bg-indigo-500',
+                      isCeiling: true
+                    },
+                    {
+                      label: 'Potassium',
+                      val: mealPlanData.dailyTotals.potassiumMg,
+                      target: clinicalEval.targets.potassiumCeilingMg,
+                      unit: 'mg',
+                      color: 'bg-purple-500',
+                      isCeiling: true
+                    }
+                  ].map((stat, idx) => {
+                    const pct = Math.min(100, Math.round((stat.val / Math.max(1, stat.target)) * 100));
+                    return (
+                      <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5">
+                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                          <span>{stat.label}</span>
+                          <span>{pct}%</span>
+                        </div>
+                        <div className="text-sm font-bold text-white mt-0.5">
+                          {stat.val}{' '}
+                          <span className="text-[11px] font-normal text-slate-400">
+                            / {stat.target} {stat.unit}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1.5">
+                          <div className={`h-full ${stat.color}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* 5 Daily Meal Cards */}
+              <div className="space-y-3">
+                {mealPlanData.selectedMeals.map(meal => (
+                  <div
+                    key={meal.slotKey}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-4 hover:border-slate-700 transition"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-teal-400">
+                            {meal.slotLabel}
+                          </span>
+                          <span className="text-[11px] text-slate-400">• {meal.slotTime}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/90 text-emerald-300 border border-emerald-800">
+                            GI {meal.recipe.gi} (Low)
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300">
+                            Portion Scale: {meal.scaleFactor}x
+                          </span>
+                        </div>
+
+                        <h3 className="text-base font-bold text-white mt-1">
+                          {meal.recipe.name}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Serving ({meal.scaleFactor}x scaled): {meal.recipe.baseServingDesc}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setSwapModalSlot(meal)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5 shrink-0"
+                      >
+                        <ArrowRightLeft className="w-3.5 h-3.5" />
+                        Swap Meal ({meal.alternatives.length})
+                      </button>
+                    </div>
+
+                    {/* Clinical Rationale Note */}
+                    <div className="mt-2.5 text-xs text-slate-300 bg-slate-950/80 border border-slate-800/80 rounded-lg px-3 py-2 flex items-start gap-2">
+                      <Info className="w-3.5 h-3.5 text-teal-400 shrink-0 mt-0.5" />
+                      <span>{meal.recipe.clinicalNotes}</span>
+                    </div>
+
+                    {/* Per-Meal Nutrient Pill Row & Pantry Match */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-teal-300 font-semibold">
+                          {meal.scaledMacros.calories} kcal
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Carbs: <strong>{meal.scaledMacros.carbsG}g</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Protein: <strong>{meal.scaledMacros.proteinG}g</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Fat: <strong>{meal.scaledMacros.fatG}g</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          Na+: <strong>{meal.scaledMacros.sodiumMg}mg</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                          K+: <strong>{meal.scaledMacros.potassiumMg}mg</strong>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {meal.pantryInfo.missingIngs.length === 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> 100% In Pantry
+                          </span>
+                        ) : (
+                          <span
+                            onClick={() => setActiveTab('pantry')}
+                            className="cursor-pointer inline-flex items-center gap-1 text-[11px] text-amber-400 font-medium hover:underline"
+                          >
+                            Missing {meal.pantryInfo.missingIngs.length} pantry item(s)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Excluded / Blocked Recipes Transparency Log */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <button
+                  onClick={() => setShowBlockedRecipes(!showBlockedRecipes)}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/40 transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Ban className="w-4 h-4 text-rose-400" />
+                    <span className="text-sm font-bold text-white">
+                      Recipes Blocked by Deterministic Clinical Rule Engine (
+                      {mealPlanData.blockedRecipesLog.length})
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 transition-transform ${
+                      showBlockedRecipes ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {showBlockedRecipes && (
+                  <div className="p-4 pt-0 border-t border-slate-800 space-y-2.5">
+                    <p className="text-xs text-slate-400 my-2">
+                      These recipes in the clinical database were deterministically rejected for{' '}
+                      <strong>{profile.name}</strong> due to lab values, diagnoses, or drug-nutrient locks:
+                    </p>
+                    {mealPlanData.blockedRecipesLog.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-950 border border-rose-900/40 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                      >
+                        <div>
+                          <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                            <span>{item.recipe.name}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
+                              GI {item.recipe.gi} • K+ {item.recipe.potassiumMg}mg • Na+{' '}
+                              {item.recipe.sodiumMg}mg
+                            </span>
+                          </div>
+                          <div className="mt-1 space-y-0.5">
+                            {item.reasons.map((r, rIdx) => (
+                              <div
+                                key={rIdx}
+                                className="text-[11px] text-rose-400 flex items-center gap-1"
+                              >
+                                <span>• {r}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {/* ================================================================
+              TAB 4: PANTRY & INGREDIENT MANAGEMENT TRACKER
+          ================================================================ */}
+          {activeTab === 'pantry' && (
+            <div className="space-y-5">
+              {/* Missing Ingredients Shopping List for Current Meal Plan */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Package className="w-4 h-4 text-teal-400" />
+                    Missing Ingredients for Active Meal Plan ({missingShoppingList.length})
+                  </h2>
+                  <span className="text-xs text-slate-400">
+                    1-Tap Restock updates Meal Generator immediately
+                  </span>
+                </div>
+
+                {missingShoppingList.length === 0 ? (
+                  <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-xl p-3 text-xs text-emerald-300 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    All ingredients required for today&apos;s 5-meal clinical plan are currently in stock in your local pantry!
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {missingShoppingList.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setPantryItems(prev =>
+                            prev.map(p => (p.id === item.id ? { ...p, inStock: true } : p))
+                          );
+                          showToast(`Marked "${item.name}" as In-Stock`);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-amber-950/50 hover:bg-amber-900/60 border border-amber-700/70 text-amber-200 text-xs font-medium flex items-center gap-1.5 transition"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{item.name}</span>
+                        <span className="text-[10px] text-amber-400 underline ml-1">
+                          Mark In-Stock
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* Pantry Controls: Search, Category Filter & Add Item */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2.5 justify-between">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Search pantry items or check clinical safety flags..."
+                      value={pantrySearch}
+                      onChange={e => setPantrySearch(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <form onSubmit={handleAddCustomPantryItem} className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add custom ingredient..."
+                      value={newPantryItemName}
+                      onChange={e => setNewPantryItemName(e.target.value)}
+                      className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shrink-0 flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add
+                    </button>
+                  </form>
+                </div>
+
+                {/* Category Filter Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
+                  {[
+                    'All',
+                    'Grains & Millets',
+                    'Pulses & Legumes',
+                    'Vegetables & Greens',
+                    'Dairy & Proteins',
+                    'Nuts, Seeds & Fruits'
+                  ].map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setPantryCategoryFilter(cat)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium shrink-0 transition ${
+                        pantryCategoryFilter === cat
+                          ? 'bg-teal-600 text-white'
+                          : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Pantry Inventory Grid with Real-Time Clinical Contraindication Badges */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
+                  {annotatedPantry
+                    .filter(item => {
+                      const matchesCat =
+                        pantryCategoryFilter === 'All' || item.category === pantryCategoryFilter;
+                      const matchesSearch = item.name
+                        .toLowerCase()
+                        .includes(pantrySearch.toLowerCase());
+                      return matchesCat && matchesSearch;
+                    })
+                    .map(item => (
+                      <div
+                        key={item.id}
+                        className={`p-3 rounded-xl border transition flex items-start justify-between gap-2 ${
+                          item.inStock
+                            ? 'bg-slate-950 border-slate-800'
+                            : 'bg-slate-950/40 border-slate-800/50 opacity-65'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">{item.name}</span>
+                            <span className="text-[10px] text-slate-500">{item.category}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono">
+                            GI: {item.gi} • K+: {item.potassiumMgPer100g}mg/100g
+                          </div>
+
+                          {/* Clinical Flags for this Pantry Item */}
+                          {item.clinicalFlags.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {item.clinicalFlags.map((flag, fIdx) => (
+                                <span
+                                  key={fIdx}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                    flag.type === 'danger'
+                                      ? 'bg-rose-950/90 text-rose-300 border-rose-800'
+                                      : 'bg-amber-950/90 text-amber-300 border-amber-800'
+                                  }`}
+                                >
+                                  <AlertTriangle className="w-3 h-3" />
+                                  {flag.label}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-emerald-400 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Clinically Safe for Profile
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() =>
+                            setPantryItems(prev =>
+                              prev.map(p =>
+                                p.id === item.id ? { ...p, inStock: !p.inStock } : p
+                              )
+                            )
+                          }
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border shrink-0 transition ${
+                            item.inStock
+                              ? 'bg-emerald-950/70 border-emerald-700 text-emerald-300'
+                              : 'bg-slate-900 border-slate-700 text-slate-400'
+                          }`}
+                        >
+                          {item.inStock ? 'In Stock' : 'Out'}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ================================================================
+              TAB 5: ANDROID APK BUILD & README GUIDE
+          ================================================================ */}
+          {activeTab === 'apk' && (
+            <div className="space-y-5">
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <FileCode className="w-5 h-5 text-teal-400" />
+                  <h2 className="text-base font-bold text-white">
+                    Standalone Offline Android APK Packaging Guide
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  This application is architected with zero external server dependencies and 100% local persistence. You can compile this exact codebase into an installable Android <code className="text-teal-300">.apk</code> using either <strong>Capacitor (React + Vite)</strong> or <strong>Expo (React Native / EAS)</strong>.
+                </p>
+              </section>
+
+              {/* Option A: Capacitor Android APK Build */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-teal-400 flex items-center gap-1.5">
+                    <Terminal className="w-4 h-4" />
+                    Option 1: Compile Direct React App to Android APK via Capacitor
+                  </h3>
+                  <button
+                    onClick={() =>
+                      copyCode(
+                        'cap_cmd',
+                        `npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/preferences\nnpx cap init "CliniDiet Rx" "com.clinidiet.localrx" --web-dir dist\nnpm run build\nnpx cap add android\nnpx cap sync android\ncd android && ./gradlew assembleDebug`
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 flex items-center gap-1"
+                  >
+                    {copiedSnippet === 'cap_cmd' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" /> Copy Commands
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <pre className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-[11px] font-mono text-teal-300 overflow-x-auto leading-relaxed">
+{`# 1. Install Capacitor Core & Android Platform
+npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/preferences
+
+# 2. Initialize Capacitor Config
+npx cap init "CliniDiet Rx" "com.clinidiet.localrx" --web-dir dist
+
+# 3. Build Production Bundle & Sync to Native Android Project
+npm run build
+npx cap add android
+npx cap sync android
+
+# 4. Compile Installable Offline APK using Local Gradle
+cd android && ./gradlew assembleDebug
+
+# Output APK Path:
+# android/app/build/outputs/apk/debug/app-debug.apk`}
+                </pre>
+              </section>
+
+              {/* capacitor.config.json */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white">
+                    capacitor.config.json (Strict Offline Configuration)
+                  </h3>
+                  <button
+                    onClick={() =>
+                      copyCode(
+                        'cap_json',
+                        JSON.stringify(
+                          {
+                            appId: 'com.clinidiet.localrx',
+                            appName: 'CliniDiet Rx',
+                            webDir: 'dist',
+                            bundledWebRuntime: false,
+                            android: {
+                              allowMixedContent: false,
+                              captureInput: true,
+                              webContentsDebuggingEnabled: false
+                            }
+                          },
+                          null,
+                          2
+                        )
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 flex items-center gap-1"
+                  >
+                    {copiedSnippet === 'cap_json' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" /> Copy JSON
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-[11px] font-mono text-slate-300 overflow-x-auto">
+{`{
+  "appId": "com.clinidiet.localrx",
+  "appName": "CliniDiet Rx",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}`}
+                </pre>
+              </section>
+
+              {/* Option B: Expo EAS Build (app.json & eas.json) */}
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-sky-400">
+                    Option 2: Expo React Native APK Configuration (eas.json + Build Command)
+                  </h3>
+                  <button
+                    onClick={() =>
+                      copyCode(
+                        'eas_cmd',
+                        `npm install -g eas-cli\neas build -p android --profile preview --local`
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 flex items-center gap-1"
+                  >
+                    {copiedSnippet === 'eas_cmd' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" /> Copy EAS Command
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-[11px] font-mono text-sky-300 overflow-x-auto leading-relaxed">
+{`// eas.json (Configure "buildType": "apk" for direct sideloading)
+{
+  "build": {
+    "preview": {
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  }
+}
+
+# Terminal Command to Generate Standalone APK:
+npx eas-cli build --platform android --profile preview --local`}
+                </pre>
+              </section>
+            </div>
+          )}
+        </main>
+
+        {/* Bottom Mobile Navigation Bar */}
+        <nav className="sticky bottom-0 w-full bg-slate-950/95 backdrop-blur border-t border-slate-800 px-2 py-1.5 flex items-center justify-around z-20">
+          {[
+            { id: 'intake', label: 'Patient Intake', icon: Activity },
+            { id: 'rules', label: 'Rule Engine', icon: Cpu, badge: clinicalEval.triggeredRules.length },
+            { id: 'meals', label: 'Meal Plan', icon: Utensils },
+            { id: 'pantry', label: 'Pantry', icon: Package, badge: missingShoppingList.length },
+            { id: 'apk', label: 'APK Build', icon: Smartphone }
+          ].map(tab => {
+            const IconComponent = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition ${
+                  isActive
+                    ? 'text-teal-400 bg-teal-950/50 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <IconComponent className="w-5 h-5" />
+                <span className="text-[11px] mt-0.5">{tab.label}</span>
+                {tab.badge > 0 && (
+                  <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-teal-500 text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* ====================================================================
+          MODALS (SWAP MEAL, WIPE DATA CONFIRMATION, JSON IMPORT, TOAST)
+      ==================================================================== */}
+      {/* 1. Swap Meal Modal */}
+      {swapModalSlot && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-4 space-y-3 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <div>
+                <h3 className="text-sm font-bold text-white">
+                  Swap {swapModalSlot.slotLabel} (Clinically Compliant Options)
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Every option below passed all active glycemic, renal, and medication rules
+                </p>
+              </div>
+              <button
+                onClick={() => setSwapModalSlot(null)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-2.5 pr-1">
+              {swapModalSlot.alternatives.map(alt => {
+                const isSelected = alt.recipe.id === swapModalSlot.recipe.id;
+                return (
+                  <div
+                    key={alt.recipe.id}
+                    onClick={() => {
+                      setMealOverrides(prev => ({
+                        ...prev,
+                        [swapModalSlot.slotKey]: alt.recipe.id
+                      }));
+                      setSwapModalSlot(null);
+                      showToast(`Swapped ${swapModalSlot.slotLabel} to ${alt.recipe.name}`);
+                    }}
+                    className={`cursor-pointer p-3 rounded-xl border transition ${
+                      isSelected
+                        ? 'bg-teal-950/60 border-teal-500'
+                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-white">{alt.recipe.name}</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                        GI {alt.recipe.gi}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">{alt.recipe.clinicalNotes}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-[11px] text-slate-300">
+                      <span>
+                        Base: {alt.recipe.calories} kcal • C:{alt.recipe.carbsG}g • P:
+                        {alt.recipe.proteinG}g • K+:{alt.recipe.potassiumMg}mg
+                      </span>
+                      <span className="text-teal-400 font-semibold">
+                        Pantry Match: {Math.round(alt.pantryInfo.pantryMatchRatio * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Confirm Wipe Local Data Modal */}
+      {confirmWipeModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-rose-800 rounded-2xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="text-base font-bold text-white">
+                Wipe All On-Device Clinical Data?
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This will permanently erase the stored patient intake profile, lab values, custom pantry items, and meal overrides from your device&apos;s local storage and restore factory test defaults.
+            </p>
+            <div className="flex justify-end gap-2.5">
+              <button
+                onClick={() => setConfirmWipeModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleWipeLocalData}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
+              >
+                Confirm Wipe Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Import JSON Backup Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">Restore Local JSON Backup</h3>
+              <button
+                onClick={() => setImportModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <textarea
+              rows={6}
+              placeholder="Paste your exported CliniDiet JSON backup here..."
+              value={importJsonText}
+              onChange={e => setImportJsonText(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 focus:border-teal-500 focus:outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setImportModalOpen(false)}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImportData}
+                className="px-4 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold"
+              >
+                Restore Backup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="fixed bottom-16 right-4 bg-teal-950 border border-teal-500 text-teal-100 px-4 py-2.5 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2 z-50">
+          <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+    </div>
+  );
+}
